@@ -12,16 +12,25 @@ async function handleFeed(req: any, res: any, mediaType?: "IMAGE" | "VIDEO") {
   const limit = Math.min(24, Math.max(6, Number(req.query.limit || 12)));
   const tab = typeof req.query.tab === "string" ? req.query.tab : "for-you";
   const search = typeof req.query.q === "string" ? req.query.q.trim() : "";
-  const types = typeof req.query.types === "string" ? req.query.types.split(",").map((t) => t.trim()) : [];
+  // Optional filter from the UI. We normalize legacy/Spanish values and ignore anything invalid
+  // so Prisma never receives an enum value that doesn't exist.
+  const typesRaw = typeof req.query.types === "string" ? req.query.types.split(",") : [];
+  const normalizeProfileType = (t: string) => {
+    const v = t.trim().toUpperCase();
+    if (v === "PERSON" || v === "PERSONA") return "VIEWER";
+    return v;
+  };
+  const allowedProfileTypes = new Set(["CREATOR", "PROFESSIONAL", "VIEWER", "SHOP"]);
+  const types = typesRaw.map(normalizeProfileType).filter((t) => allowedProfileTypes.has(t));
   const categories = typeof req.query.categories === "string" ? req.query.categories.split(",").map((c) => c.trim()) : [];
   const sort = typeof req.query.sort === "string" ? req.query.sort : "new";
   const lat = req.query.lat ? Number(req.query.lat) : null;
   const lng = req.query.lng ? Number(req.query.lng) : null;
 
-  // Default feed should include PERSON too (so normal accounts can post/appear in "Para ti").
+  // Default feed should include VIEWER too ("persona" in the UI) so normal accounts can post/appear in "Para ti".
   // "Siguiendo" is still restricted via the subscription filter below.
   const authorWhere: any = {
-    profileType: { in: types.length ? types : ["CREATOR", "PROFESSIONAL", "PERSON"] }
+    profileType: { in: types.length ? types : ["CREATOR", "PROFESSIONAL", "VIEWER"] }
   };
 
   // "Siguiendo" for UZEED = creators/pros you have an active subscription with.
