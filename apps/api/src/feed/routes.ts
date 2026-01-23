@@ -12,24 +12,26 @@ async function handleFeed(req: any, res: any, mediaType?: "IMAGE" | "VIDEO") {
   const limit = Math.min(24, Math.max(6, Number(req.query.limit || 12)));
   const tab = typeof req.query.tab === "string" ? req.query.tab : "for-you";
   const search = typeof req.query.q === "string" ? req.query.q.trim() : "";
-  // Optional filter from the UI. We normalize legacy/Spanish values and ignore anything invalid
-  // so Prisma never receives an enum value that doesn't exist.
-  const typesRaw = typeof req.query.types === "string" ? req.query.types.split(",") : [];
-  const normalizeProfileType = (t: string) => {
-    const v = t.trim().toUpperCase();
-    if (v === "PERSON" || v === "PERSONA") return "VIEWER";
-    return v;
-  };
-  const allowedProfileTypes = new Set(["CREATOR", "PROFESSIONAL", "VIEWER", "SHOP"]);
-  const types = typesRaw.map(normalizeProfileType).filter((t) => allowedProfileTypes.has(t));
+  const rawTypes = typeof req.query.types === "string" ? req.query.types.split(",").map((t) => t.trim()) : [];
   const categories = typeof req.query.categories === "string" ? req.query.categories.split(",").map((c) => c.trim()) : [];
   const sort = typeof req.query.sort === "string" ? req.query.sort : "new";
   const lat = req.query.lat ? Number(req.query.lat) : null;
   const lng = req.query.lng ? Number(req.query.lng) : null;
 
-  // Default feed should include VIEWER too ("persona" in the UI) so normal accounts can post/appear in "Para ti".
-  // "Siguiendo" is still restricted via the subscription filter below.
+  // Prisma enum is ProfileType (CREATOR | PROFESSIONAL | VIEWER | SHOP).
+  // The UI/seed data sometimes uses PERSON/PERSONA; normalize that to VIEWER and
+  // drop anything invalid to avoid Prisma "Invalid value for argument `in`".
+  const validProfileTypes = new Set(["CREATOR", "PROFESSIONAL", "VIEWER", "SHOP"]);
+  const types = rawTypes
+    .map((t) => {
+      const up = String(t || "").trim().toUpperCase();
+      if (up === "PERSON" || up === "PERSONA") return "VIEWER";
+      return up;
+    })
+    .filter((t) => validProfileTypes.has(t));
+
   const authorWhere: any = {
+    // Default should include VIEWER so normal users see their own posts in the main feed.
     profileType: { in: types.length ? types : ["CREATOR", "PROFESSIONAL", "VIEWER"] }
   };
 
@@ -55,32 +57,40 @@ async function handleFeed(req: any, res: any, mediaType?: "IMAGE" | "VIDEO") {
     }));
   }
 
-  // Always include own posts in the feed, even if the author's profileType or plan filters
-  // would otherwise exclude them (useful for testing and for SHOP accounts before upgrade).
-  const where: any = userId
-    ? { AND: [{ OR: [{ author: authorWhere }, { authorId: userId }] }] }
-    : { author: authorWhere };
+  const and: any[] = [];
+
+  // Always allow the logged-in user to see their own posts in the feed.
+  if (userId) {
+    and.push({ OR: [{ author: authorWhere }, { authorId: userId }] });
+  } else {
+    and.push({ author: authorWhere });
+  }
+
   if (mediaType) {
-    where.media = { some: { type: mediaType } };
-    where.type = mediaType === "VIDEO" ? "VIDEO" : "IMAGE";
+    and.push({ media: { some: { type: mediaType } } });
+    and.push({ type: mediaType === "VIDEO" ? "VIDEO" : "IMAGE" });
   }
 
   if (search) {
-    where.OR = [
-      { title: { contains: search, mode: "insensitive" } },
-      { body: { contains: search, mode: "insensitive" } },
-      {
-        author: {
-          OR: [
-            { username: { contains: search, mode: "insensitive" } },
-            { displayName: { contains: search, mode: "insensitive" } },
-            { serviceCategory: { contains: search, mode: "insensitive" } },
-            { city: { contains: search, mode: "insensitive" } }
-          ]
+    and.push({
+      OR: [
+        { title: { contains: search, mode: "insensitive" } },
+        { body: { contains: search, mode: "insensitive" } },
+        {
+          author: {
+            OR: [
+              { username: { contains: search, mode: "insensitive" } },
+              { displayName: { contains: search, mode: "insensitive" } },
+              { serviceCategory: { contains: search, mode: "insensitive" } },
+              { city: { contains: search, mode: "insensitive" } }
+            ]
+          }
         }
-      }
-    ];
+      ]
+    });
   }
+
+  const where: any = { AND: and };
 
   const posts = await prisma.post.findMany({
     orderBy: sort === "popular"
@@ -136,8 +146,6 @@ async function handleFeed(req: any, res: any, mediaType?: "IMAGE" | "VIDEO") {
   const payload = posts
     .filter((p) => {
       if (!p.author) return true;
-      // Always let the owner see their own posts in the feed, even if their plan is inactive.
-      if (userId && p.authorId === userId) return true;
       return isBusinessPlanActive(p.author);
     })
     .map((p) => {
@@ -196,7 +204,14 @@ async function handleFeed(req: any, res: any, mediaType?: "IMAGE" | "VIDEO") {
     })
     : payload;
 
-  return res.json({ posts: sortedPayload, nextPage: sortedPayload.length === limit ? page + 1 : null });
+  // Keep response compatible with both clients:
+  // - ReelsClient expects `posts`
+  // - FeedClient historically used `items`
+  return res.json({
+    posts: sortedPayload,
+    items: sortedPayload,
+    nextPage: sortedPayload.length === limit ? page + 1 : null,
+  });
 }
 
 feedRouter.get("/explore", asyncHandler((req, res) => handleFeed(req, res)));
