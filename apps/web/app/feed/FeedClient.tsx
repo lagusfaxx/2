@@ -33,8 +33,7 @@ export default function FeedClient() {
       try {
         setPending(true);
         setError(null);
-        // apiFetch is generic; if we don't provide a type, TS may infer `{}` and break on `data.items`.
-        const data = await apiFetch<any>('/feed');
+        const data = await apiFetch('/feed');
         const items = Array.isArray(data) ? data : (data?.items ?? []);
         if (!mounted) return;
         setPosts(items);
@@ -197,7 +196,7 @@ function PostCard({ post }: { post: AnyPost }) {
         <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={resolveMediaUrl(imageUrl)}
+            src={resolveMediaUrl(imageUrl) ?? undefined}
             alt="post"
             className="h-auto w-full object-cover"
             loading="lazy"
