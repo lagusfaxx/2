@@ -33,8 +33,9 @@ export default function FeedClient() {
       try {
         setPending(true);
         setError(null);
-        const data = await apiFetch('/feed');
-        const items = Array.isArray(data) ? data : (data?.items ?? []);
+         const data: any = await apiFetch('/feed');
+         const items = Array.isArray(data) ? data : (data?.items ?? []);
+
         if (!mounted) return;
         setPosts(items);
       } catch (e: any) {
