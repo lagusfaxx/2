@@ -33,7 +33,8 @@ export default function FeedClient() {
       try {
         setPending(true);
         setError(null);
-        const data = await apiFetch('/feed');
+        // apiFetch is generic; if we don't provide a type, TS may infer `{}` and break on `data.items`.
+        const data = await apiFetch<any>('/feed');
         const items = Array.isArray(data) ? data : (data?.items ?? []);
         if (!mounted) return;
         setPosts(items);
