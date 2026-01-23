@@ -1,38 +1,56 @@
 "use client";
 
-import React from "react";
+import React, { useMemo, useState } from "react";
+import { resolveMediaUrl } from "../lib/api";
 
-type Props = {
+type AvatarProps = {
   src?: string | null;
   alt?: string;
   size?: number;
   className?: string;
 };
 
-/**
- * Avatar premium con fallback "incognito".
- * - Si hay src => muestra imagen
- * - Si no hay src => fallback SVG tipo incognito (premium)
- */
-export default function Avatar({ src, alt = "avatar", size = 40, className = "" }: Props) {
-  const s = size;
+export default function Avatar({
+  src,
+  alt = "avatar",
+  size = 40,
+  className = "",
+}: AvatarProps) {
+  const [failed, setFailed] = useState(false);
+
+  const normalizedSrc = useMemo(() => {
+    if (!src) return "";
+    try {
+      return resolveMediaUrl(src);
+    } catch {
+      return src;
+    }
+  }, [src]);
+
+  const showImage = !!normalizedSrc && !failed;
+  const s = Math.max(18, size);
 
   return (
     <div
-      className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/5 ${className}`}
+      className={[
+        "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full",
+        "border border-white/10 bg-white/5",
+        className,
+      ].join(" ")}
       style={{ width: s, height: s }}
     >
-      {src ? (
+      {showImage ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={src}
+          src={normalizedSrc}
           alt={alt}
           className="h-full w-full object-cover"
           referrerPolicy="no-referrer"
+          onError={() => setFailed(true)}
         />
       ) : (
         <div className="flex h-full w-full items-center justify-center bg-gradient-to-b from-white/10 to-white/5">
-          {/* Incognito SVG */}
+          {/* Incognito SVG (premium) */}
           <svg
             width={Math.max(18, Math.floor(s * 0.55))}
             height={Math.max(18, Math.floor(s * 0.55))}
@@ -65,7 +83,7 @@ export default function Avatar({ src, alt = "avatar", size = 40, className = "" 
               strokeLinecap="round"
             />
 
-            {/* Cara */}
+            {/* Boca/silueta */}
             <path
               d="M7.5 16.5C8.5 15.7 9.9 15.3 12 15.3C14.1 15.3 15.5 15.7 16.5 16.5"
               stroke="white"
