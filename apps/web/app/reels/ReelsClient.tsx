@@ -4,9 +4,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, resolveMediaUrl } from "../../lib/api";
-import Avatar from "../../components/Avatar";
 import CreatePostModal from "../../components/CreatePostModal";
 import useMe from "../../hooks/useMe";
+import Avatar from "../../components/Avatar";
 
 type ReelPost = {
   id: string;
