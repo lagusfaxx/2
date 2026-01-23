@@ -181,7 +181,7 @@ function PostCard({ post }: { post: AnyPost }) {
           className="flex min-w-0 items-center gap-3 text-left"
           onClick={() => post?.author?.username && router.push(`/perfil/${post.author.username}`)}
         >
-          <Avatar url={avatarUrl} size={40} />
+          <Avatar src={avatarUrl} size={40} />
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold">{authorName}</div>
             <div className="truncate text-xs text-white/70">{handle}</div>
