@@ -167,6 +167,7 @@ const requireAuth = (fn?: () => void, nextPath?: string) => {
   ];
 
   const profileHref = me?.user?.username ? `/perfil/${me.user.username}` : "/dashboard";
+  const nextToLogin = `/login?next=${encodeURIComponent(pathname || "/inicio")}`;
 
   return (
     <>
