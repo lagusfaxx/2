@@ -1,204 +1,229 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
-import useMe from "../../hooks/useMe";
-import Avatar from "../../components/Avatar";
-import { apiFetch, resolveMediaUrl } from "../../lib/api";
-import { MediaPreview } from "../../components/Media";
-import CreatePostModal from "../../components/CreatePostModal";
-import FloatingCreateButton from "../../components/FloatingCreateButton";
+import React, { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import Avatar from '../../components/Avatar';
+import { apiFetch } from '../../lib/api';
+import useMe from '../../hooks/useMe';
 
-type FeedPost = {
-  id: string;
-  title: string;
-  body: string;
-  createdAt: string;
-  isPublic: boolean;
-  paywalled: boolean;
-  isSubscribed: boolean;
-  preview: { id: string; type: "IMAGE" | "VIDEO"; url: string } | null;
-  media: { id: string; type: "IMAGE" | "VIDEO"; url: string }[];
-  author: {
-    id: string;
-    displayName: string | null;
-    username: string;
-    avatarUrl: string | null;
-    profileType: string;
-  };
-};
+type AnyPost = any;
 
-type FeedResponse = { posts: FeedPost[]; nextPage: number | null };
+function fmtCount(n: any) {
+  const num = Number(n || 0);
+  if (!Number.isFinite(num)) return '0';
+  if (num >= 1000000) return `${(num / 1000000).toFixed(num % 1000000 === 0 ? 0 : 1)}M`;
+  if (num >= 1000) return `${(num / 1000).toFixed(num % 1000 === 0 ? 0 : 1)}k`;
+  return `${num}`;
+}
 
 export default function FeedClient() {
   const router = useRouter();
-  const pathname = usePathname();
-  const { me, loading: meLoading } = useMe();
-
-  const [posts, setPosts] = useState<FeedPost[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const { me, loading } = useMe();
+  const [tab, setTab] = useState<'forYou' | 'following'>('forYou');
+  const [posts, setPosts] = useState<AnyPost[]>([]);
+  const [pending, setPending] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [nextPage, setNextPage] = useState<number | null>(1);
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
-  const [tab, setTab] = useState<"Para ti" | "Siguiendo">("Para ti");
-  const [modalOpen, setModalOpen] = useState(false);
 
-  const openCreate = () => {
-    if (meLoading) return;
-    if (!me?.user) {
-      router.push(`/login?next=${encodeURIComponent(pathname || "/feed")}`);
-      return;
-    }
-    setModalOpen(true);
+  const isAuthed = !!me;
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        setPending(true);
+        setError(null);
+        const data = await apiFetch('/feed');
+        const items = Array.isArray(data) ? data : (data?.items ?? []);
+        if (!mounted) return;
+        setPosts(items);
+      } catch (e: any) {
+        if (!mounted) return;
+        setError(e?.message || 'No se pudo cargar el feed');
+      } finally {
+        if (mounted) setPending(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const visiblePosts = useMemo(() => {
+    // Future: filter based on tab.
+    return posts;
+  }, [posts]);
+
+  const trends = [
+    { tag: '#DiseñoWeb', posts: '12.5k publicaciones' },
+    { tag: '#Fotografia', posts: '9.3k publicaciones' },
+    { tag: '#Tecnologia', posts: '18.7k publicaciones' }
+  ];
+
+  const suggestions = [
+    { name: 'Veronica Palacios', handle: '@veropalacios', subtitle: 'Especialista en marketing' },
+    { name: 'Camila Vargas', handle: '@camilavargas', subtitle: 'Fotógrafa' }
+  ];
+
+  const onRequireAuth = (nextPath: string) => {
+    const next = encodeURIComponent(nextPath);
+    router.push(`/login?next=${next}`);
   };
 
+  return (
+    <div className="w-full">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
+        {/* Center */}
+        <section className="min-w-0">
+          <div className="sticky top-0 z-20 -mx-4 mb-4 border-b border-white/10 bg-black/20 px-4 pt-3 backdrop-blur-xl lg:-mx-0 lg:rounded-3xl lg:border lg:bg-white/5 lg:shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
+            <div className="flex items-end justify-center gap-8 pb-3 text-sm font-semibold">
+              <button
+                type="button"
+                onClick={() => setTab('forYou')}
+                className={`relative px-2 py-1 transition ${tab === 'forYou' ? 'text-white' : 'text-white/70 hover:text-white'}`}
+              >
+                Para ti
+                {tab === 'forYou' && (
+                  <span className="absolute -bottom-3 left-1/2 h-[2px] w-14 -translate-x-1/2 rounded-full bg-white" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab('following')}
+                className={`relative px-2 py-1 transition ${tab === 'following' ? 'text-white' : 'text-white/70 hover:text-white'}`}
+              >
+                Siguiendo
+                {tab === 'following' && (
+                  <span className="absolute -bottom-3 left-1/2 h-[2px] w-20 -translate-x-1/2 rounded-full bg-white" />
+                )}
+              </button>
+            </div>
+          </div>
 
-  async function load(page: number, mode: "reset" | "append") {
-    if (mode === "append") setLoadingMore(true);
-    if (mode === "reset") setLoading(true);
-    try {
-      const apiTab = tab === "Siguiendo" ? "following" : "for-you";
-      const res = await apiFetch<FeedResponse>(`/posts?type=IMAGE&tab=${encodeURIComponent(apiTab)}&page=${page}&limit=12`);
-      setPosts((prev) => (mode === "append" ? [...prev, ...res.posts] : res.posts));
-      setNextPage(res.nextPage);
-      setError(null);
-    } catch (e: any) {
-      setError(e?.message || "No se pudo cargar el inicio");
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  }
+          <div className="space-y-4 pb-16">
+            {loading && (
+              <div className="uzeed-glass rounded-3xl p-6">
+                <div className="h-4 w-40 rounded bg-white/10" />
+                <div className="mt-4 h-3 w-72 rounded bg-white/10" />
+                <div className="mt-6 h-64 w-full rounded-2xl bg-white/10" />
+              </div>
+            )}
 
-  useEffect(() => {
-    setNextPage(1);
-    load(1, "reset");
-  }, [tab]);
+            {!loading && posts.length === 0 && (
+              <div className="uzeed-glass rounded-3xl p-6 text-white/80">
+                No hay publicaciones todavía.
+              </div>
+            )}
 
-  useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el) return;
-    if (!nextPage || loading || loadingMore) return;
-    const observer = new IntersectionObserver((entries) => {
-      if (entries[0]?.isIntersecting && nextPage) {
-        load(nextPage, "append");
-      }
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [nextPage, loading, loadingMore]);
+            {posts.map((post: AnyPost) => (
+              <PostCard key={post.id} post={post} />
+            ))}
+          </div>
+        </section>
 
-  if (loading) {
-    return (
-      <div className="grid gap-6">
-        <div className="card p-6">
-          <div className="h-6 w-40 rounded bg-white/10 animate-pulse" />
-          <div className="mt-3 h-4 w-72 rounded bg-white/10 animate-pulse" />
-        </div>
+        {/* Right rail */}
+        <aside className="hidden lg:block">
+          <div className="sticky top-6 space-y-4">
+            <div className="uzeed-glass rounded-3xl p-5">
+              <div className="mb-3 text-sm font-semibold">Tendencias</div>
+              <div className="space-y-3">
+                {trends.map((t) => (
+                  <div key={t.tag} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                    <div className="font-semibold">{t.tag}</div>
+                    <div className="mt-1 text-xs text-white/70">{t.posts}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="uzeed-glass rounded-3xl p-5">
+              <div className="mb-3 text-sm font-semibold">A quién seguir</div>
+              <div className="space-y-3">
+                {suggestions.map((s) => (
+                  <div key={s.handle} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                    <div className="min-w-0">
+                      <div className="truncate font-semibold">{s.name}</div>
+                      <div className="truncate text-xs text-white/70">{s.handle} · {s.subtitle}</div>
+                    </div>
+                    <button className="uzeed-pill px-4 py-2 text-xs font-semibold">Seguir</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="px-1 text-xs text-white/50">
+              Términos · Privacidad · Acerca de
+            </div>
+          </div>
+        </aside>
       </div>
-    );
-  }
+    </div>
+  );
+}
+
+function PostCard({ post }: { post: AnyPost }) {
+  const router = useRouter();
+
+  const authorName = post?.author?.displayName || post?.author?.username || 'Usuario';
+  const handle = post?.author?.username ? `@${post.author.username}` : '';
+  const avatarUrl = post?.author?.avatarUrl || post?.author?.avatar || '';
+
+  const imageUrl = post?.media?.[0]?.url || post?.imageUrl || '';
+  const likeCount = post?.likeCount ?? post?.likesCount ?? post?._count?.likes ?? post?._count?.Like ?? 0;
+  const commentCount = post?.commentCount ?? post?.commentsCount ?? post?._count?.comments ?? post?._count?.Comment ?? 0;
+  const shareCount = post?.shareCount ?? 0;
 
   return (
-    <div className="grid gap-6">
-      <div className="card p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold">Inicio</h1>
-            <p className="mt-1 text-sm text-white/70">Publicaciones de creadores y profesionales.</p>
+    <article className="uzeed-glass rounded-3xl p-5">
+      <div className="flex items-start justify-between gap-3">
+        <button
+          className="flex min-w-0 items-center gap-3 text-left"
+          onClick={() => post?.author?.username && router.push(`/perfil/${post.author.username}`)}
+        >
+          <Avatar url={avatarUrl} size={40} />
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold">{authorName}</div>
+            <div className="truncate text-xs text-white/70">{handle}</div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2 py-1">
-              {(["Para ti", "Siguiendo"] as const).map((item) => (
-                <button
-                  key={item}
-                  className={tab === item ? "btn-primary" : "btn-secondary"}
-                  onClick={() => setTab(item)}
-                >
-                  {item}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+        </button>
+
+        <button className="rounded-full px-2 py-1 text-white/70 hover:bg-white/10 hover:text-white">···</button>
       </div>
 
-      {error ? (
-        <div className="card p-4 text-sm text-red-200 border-red-500/30 bg-red-500/10">
-          {error}
+      {post?.content && <div className="mt-3 text-sm text-white/90">{post.content}</div>}
+
+      {imageUrl && (
+        <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={imageUrl}
+            alt="post"
+            className="h-auto w-full object-cover"
+            loading="lazy"
+          />
         </div>
-      ) : null}
+      )}
 
-      <div className="grid gap-6 max-w-[630px] mx-auto w-full">
-        {posts.map((post) => {
-          const preview = post.preview ? { url: post.preview.url, type: post.preview.type } : null;
-          const typeLabel =
-            post.author.profileType === "CREATOR"
-              ? "Creadora"
-              : post.author.profileType === "PROFESSIONAL"
-                ? "Profesional"
-                : post.author.profileType === "SHOP"
-                  ? "Negocio"
-                  : "Persona";
+      <div className="mt-4 flex items-center justify-between text-white/75">
+        <div className="flex items-center gap-4">
+          <button className="flex items-center gap-2 rounded-full px-3 py-2 hover:bg-white/10">
+            <span aria-hidden>❤</span>
+            <span className="text-xs">{fmtCount(likeCount)}</span>
+          </button>
+          <button className="flex items-center gap-2 rounded-full px-3 py-2 hover:bg-white/10">
+            <span aria-hidden>💬</span>
+            <span className="text-xs">{fmtCount(commentCount)}</span>
+          </button>
+          <button className="flex items-center gap-2 rounded-full px-3 py-2 hover:bg-white/10">
+            <span aria-hidden>↗</span>
+            <span className="text-xs">{fmtCount(shareCount)}</span>
+          </button>
+        </div>
 
-          return (
-            <article key={post.id} className="card p-6">
-              <div className="flex items-center justify-between gap-3">
-                <Link href={`/perfil/${post.author.username}`} className="flex items-center gap-3 hover:opacity-95">
-                  <Avatar src={post.author.avatarUrl} alt={post.author.username} size={48} />
-                  <div className="min-w-0">
-                    <div className="font-semibold truncate">{post.author.displayName || post.author.username}</div>
-                    <div className="text-xs text-white/50">
-                      {typeLabel} • {new Date(post.createdAt).toLocaleString("es-CL")}
-                    </div>
-                  </div>
-                </Link>
-                <Link className="text-xs text-white/40 hover:text-white/70" href={`/perfil/${post.author.username}`}>@{post.author.username}</Link>
-              </div>
-              <div className="mt-4 text-sm text-white/80">{post.body}</div>
-              <div className="mt-4">
-                <MediaPreview item={preview} paywalled={post.paywalled} alt={post.title} className="h-[360px] w-full" />
-              </div>
-              <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
-                <button className="btn-ghost" type="button">
-                  ❤️ Me gusta
-                </button>
-                <button className="btn-ghost" type="button">
-                  💾 Guardar
-                </button>
-                <button className="btn-ghost" type="button">
-                  💬 Comentar
-                </button>
-                <Link className="btn-ghost" href={`/chats/${post.author.id}`}>
-                  ✉️ Enviar
-                </Link>
-              </div>
-            </article>
-          );
-        })}
-
-        {!posts.length ? (
-          <div className="card p-8 text-center text-white/70">
-            <p className="text-lg font-semibold">Sigue perfiles o publica algo</p>
-            <p className="mt-2 text-sm text-white/50">Crea tu primer post o descubre nuevos perfiles.</p>
-            <div className="mt-4 flex flex-wrap justify-center gap-2">
-              <button className="btn-primary" onClick={openCreate}>
-                Crear publicación
-              </button>
-              <Link className="btn-secondary" href="/explore">
-                Explorar perfiles
-              </Link>
-            </div>
-          </div>
-        ) : null}
+        <button className="flex items-center gap-2 rounded-full px-3 py-2 hover:bg-white/10">
+          <span aria-hidden>🔖</span>
+        </button>
       </div>
-
-      <div ref={sentinelRef} className="h-10" />
-
-      <FloatingCreateButton onClick={openCreate} />
-      <CreatePostModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onCreated={() => load(1, "reset")} />
-    </div>
+    </article>
   );
 }

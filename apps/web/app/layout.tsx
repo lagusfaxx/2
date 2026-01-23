@@ -1,27 +1,16 @@
-import type { Metadata } from "next";
-import "./globals.css";
-import Nav from "../components/Nav";
+import type { Metadata } from 'next';
+import './globals.css';
+import Nav from '../components/Nav';
 
-export const metadata: Metadata = {
-  title: "UZEED",
-  description: "UZEED"
-};
+export const metadata: Metadata = { title: 'UZEED', description: 'UZEED' };
 
-export default function RootLayout({
-  children
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es">
-      <body className="min-h-screen bg-black text-white">
-        <div className="flex">
+      <body className="min-h-screen text-white antialiased">
+        <div className="mx-auto flex min-h-screen w-full max-w-[1400px] gap-6 px-4 py-6 lg:px-8">
           <Nav />
-          <main className="flex-1">
-            <div className="mx-auto w-full max-w-[1100px] px-4 py-8 md:px-8 md:py-10 pb-24 md:pb-10">
-              {children}
-            </div>
-          </main>
+          <main className="min-w-0 flex-1">{children}</main>
         </div>
       </body>
     </html>
