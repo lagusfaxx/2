@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Avatar from '../../components/Avatar';
-import { apiFetch } from '../../lib/api';
+import { apiFetch, resolveMediaUrl } from '../../lib/api';
 import useMe from '../../hooks/useMe';
 
 type AnyPost = any;
@@ -33,9 +33,8 @@ export default function FeedClient() {
       try {
         setPending(true);
         setError(null);
-         const data: any = await apiFetch('/feed');
-         const items = Array.isArray(data) ? data : (data?.items ?? []);
-
+        const data = await apiFetch('/feed');
+        const items = Array.isArray(data) ? data : (data?.items ?? []);
         if (!mounted) return;
         setPosts(items);
       } catch (e: any) {
@@ -181,7 +180,7 @@ function PostCard({ post }: { post: AnyPost }) {
           className="flex min-w-0 items-center gap-3 text-left"
           onClick={() => post?.author?.username && router.push(`/perfil/${post.author.username}`)}
         >
-          <Avatar src={avatarUrl} size={40} />
+          <Avatar src={avatarUrl} alt={post?.author?.username || authorName} size={40} />
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold">{authorName}</div>
             <div className="truncate text-xs text-white/70">{handle}</div>
@@ -197,7 +196,7 @@ function PostCard({ post }: { post: AnyPost }) {
         <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={imageUrl}
+            src={resolveMediaUrl(imageUrl)}
             alt="post"
             className="h-auto w-full object-cover"
             loading="lazy"
