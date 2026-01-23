@@ -18,8 +18,10 @@ async function handleFeed(req: any, res: any, mediaType?: "IMAGE" | "VIDEO") {
   const lat = req.query.lat ? Number(req.query.lat) : null;
   const lng = req.query.lng ? Number(req.query.lng) : null;
 
+  // Default feed should include PERSON too (so normal accounts can post/appear in "Para ti").
+  // "Siguiendo" is still restricted via the subscription filter below.
   const authorWhere: any = {
-    profileType: { in: types.length ? types : ["CREATOR", "PROFESSIONAL"] }
+    profileType: { in: types.length ? types : ["CREATOR", "PROFESSIONAL", "PERSON"] }
   };
 
   // "Siguiendo" for UZEED = creators/pros you have an active subscription with.
@@ -44,7 +46,11 @@ async function handleFeed(req: any, res: any, mediaType?: "IMAGE" | "VIDEO") {
     }));
   }
 
-  const where: any = { author: authorWhere };
+  // Always include own posts in the feed, even if the author's profileType or plan filters
+  // would otherwise exclude them (useful for testing and for SHOP accounts before upgrade).
+  const where: any = userId
+    ? { AND: [{ OR: [{ author: authorWhere }, { authorId: userId }] }] }
+    : { author: authorWhere };
   if (mediaType) {
     where.media = { some: { type: mediaType } };
     where.type = mediaType === "VIDEO" ? "VIDEO" : "IMAGE";
@@ -121,6 +127,8 @@ async function handleFeed(req: any, res: any, mediaType?: "IMAGE" | "VIDEO") {
   const payload = posts
     .filter((p) => {
       if (!p.author) return true;
+      // Always let the owner see their own posts in the feed, even if their plan is inactive.
+      if (userId && p.authorId === userId) return true;
       return isBusinessPlanActive(p.author);
     })
     .map((p) => {
