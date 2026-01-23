@@ -178,7 +178,10 @@ function PostCard({ post }: { post: AnyPost }) {
   const handle = post?.author?.username ? `@${post.author.username}` : '';
   const avatarUrl = post?.author?.avatarUrl || post?.author?.avatar || '';
 
-  const imageUrl = post?.media?.[0]?.url || post?.imageUrl || '';
+  // Media puede venir en distinto orden (y no siempre en [0]); priorizamos IMAGE y caemos a cualquier url válida.
+  const imageMedia = (post?.media || []).find((m: any) => (m?.type === 'IMAGE' || String(m?.mime || '').startsWith('image/')) && m?.url)
+    ?? (post?.media || []).find((m: any) => !!m?.url);
+  const imageUrl = (post?.imageUrl || post?.coverUrl || imageMedia?.url || '');
   const likeCount = post?.likeCount ?? post?.likesCount ?? post?._count?.likes ?? post?._count?.Like ?? 0;
   const commentCount = post?.commentCount ?? post?.commentsCount ?? post?._count?.comments ?? post?._count?.Comment ?? 0;
   const shareCount = post?.shareCount ?? 0;
@@ -203,17 +206,15 @@ function PostCard({ post }: { post: AnyPost }) {
       {post?.content && <div className="mt-3 text-sm text-white/90">{post.content}</div>}
 
       {imageUrl && (
-        <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
-          <div className="relative w-full aspect-[4/5] md:aspect-[16/9]">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+        <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-black/10">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
             // resolveMediaUrl puede devolver null; en ese caso no pasamos null a <img src>
             src={resolveMediaUrl(imageUrl) ?? undefined}
             alt="post"
-            className="absolute inset-0 h-full w-full object-cover"
+            className="block w-full h-auto max-h-[70vh] object-contain bg-black/20"
             loading="lazy"
           />
-          </div>
         </div>
       )}
 
