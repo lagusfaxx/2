@@ -98,8 +98,19 @@ function Badge({ count }: { count: number }) {
 
 export default function Nav() {
   const pathname = usePathname();
+
+const requireAuth = (fn?: () => void, nextPath?: string) => {
+  if (loading) return;
+  if (!me) {
+    const next = encodeURIComponent(nextPath ?? pathname ?? "/");
+    router.push(`/login?next=${next}`);
+    return;
+  }
+  fn?.();
+};
+
   const router = useRouter();
-  const { me } = useMe();
+  const { me, loading } = useMe();
 
   const [collapsed, setCollapsed] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -151,7 +162,7 @@ export default function Nav() {
   const secondary: SecondaryItem[] = [
     { action: () => setSearchOpen(true), label: "Buscar", icon: "search" as const },
     { action: () => requireAuth(() => setNotifsOpen((o) => !o)), label: "Notificaciones", icon: "bell" as const, badge: unreadNotifs },
-    { href: "/chats", label: "Mensajes", icon: "chat" as const, badge: unreadChats },
+    { action: () => requireAuth(() => router.push("/chats"), "/chats"), label: "Mensajes", icon: "chat" as const, badge: unreadChats },
     { action: () => requireAuth(() => setCreateOpen(true)), label: "Crear", icon: "plus" as const },
   ];
 
@@ -303,13 +314,11 @@ export default function Nav() {
           <button onClick={() => requireAuth(() => setCreateOpen(true))} className="flex flex-col items-center justify-center gap-1 py-1 text-xs">
             <Icon name="plus" />
           </button>
-          <Link className="relative flex flex-col items-center justify-center gap-1 py-1 text-xs" href="/chats">
+          <button onClick={() => requireAuth(() => router.push("/chats"), "/chats")} className="relative flex flex-col items-center justify-center gap-1 py-1 text-xs" type="button">
             <Icon name="chat" />
             {unreadChats ? <span className="absolute right-4 top-1 h-2 w-2 rounded-full bg-fuchsia-500" /> : null}
-          </Link>
-          <Link className="flex flex-col items-center justify-center gap-1 py-1 text-xs" href={profileHref}>
-            <Icon name="user" />
-          </Link>
+          </button>
+          <button onClick={() => requireAuth(() => router.push(profileHref), profileHref)} className="flex flex-col items-center justify-center gap-1 py-1 text-xs" type="button"><Icon name="user" /></button>
           <button onClick={() => requireAuth(() => setNotifsOpen(true))} className="relative flex flex-col items-center justify-center gap-1 py-1 text-xs">
             <Icon name="bell" />
             {unreadNotifs ? <span className="absolute right-4 top-1 h-2 w-2 rounded-full bg-fuchsia-500" /> : null}
