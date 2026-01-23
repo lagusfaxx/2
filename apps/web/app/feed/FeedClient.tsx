@@ -204,14 +204,16 @@ function PostCard({ post }: { post: AnyPost }) {
 
       {imageUrl && (
         <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <div className="relative w-full aspect-[4/5] md:aspect-[16/9]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
             // resolveMediaUrl puede devolver null; en ese caso no pasamos null a <img src>
             src={resolveMediaUrl(imageUrl) ?? undefined}
             alt="post"
-            className="h-auto w-full object-cover"
+            className="absolute inset-0 h-full w-full object-cover"
             loading="lazy"
           />
+          </div>
         </div>
       )}
 
