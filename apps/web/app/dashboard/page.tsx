@@ -492,6 +492,7 @@ export default function DashboardPage() {
                   <input
                     type="file"
                     accept="image/*"
+                    className="file-input"
                     onChange={(e) => handleImageSelection(e.target.files?.[0] || null, setAvatarFile)}
                   />
                 </div>
@@ -500,6 +501,7 @@ export default function DashboardPage() {
                   <input
                     type="file"
                     accept="image/*"
+                    className="file-input"
                     onChange={(e) => handleImageSelection(e.target.files?.[0] || null, setCoverFile)}
                   />
                 </div>

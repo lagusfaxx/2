@@ -175,9 +175,13 @@ const requireAuth = (fn?: () => void, nextPath?: string) => {
       <aside className={`hidden md:flex h-screen sticky top-0 ${collapsed ? "w-[88px]" : "w-[280px]"} shrink-0 flex-col border-r border-white/10 bg-black/40 backdrop-blur supports-[backdrop-filter]:bg-black/30`}>
         <div className="flex items-center justify-between px-4 py-4">
           <Link href="/inicio" className="flex items-center gap-2">
-            <img src="/brand/isotipo.png" alt="UZEED" className="h-8 w-8 rounded-2xl border border-white/10 bg-white/5 object-cover" />
+            <img
+              src="/brand/isotipo.png"
+              alt="UZEED"
+              className="h-9 w-9 rounded-2xl border border-white/10 bg-white/5 object-cover"
+            />
             {!collapsed ? (
-              <img src="/brand/logo.png" alt="UZEED" className="h-6 w-auto opacity-95" />
+              <span className="text-sm font-semibold tracking-[0.25em] text-white/90">UZEED</span>
             ) : null}
           </Link>
           <button
@@ -304,27 +308,32 @@ const requireAuth = (fn?: () => void, nextPath?: string) => {
       </aside>
 
       {/* Mobile bottom nav */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-black/70 backdrop-blur" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
-        <div className="mx-auto grid max-w-[520px] grid-cols-6 px-3 py-2">
+      <div
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-black/35 backdrop-blur-2xl"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        <div className="mx-auto grid max-w-[520px] grid-cols-5 px-3 py-2">
           <Link className="flex flex-col items-center justify-center gap-1 py-1 text-xs" href="/inicio">
             <Icon name="home" />
           </Link>
           <Link className="flex flex-col items-center justify-center gap-1 py-1 text-xs" href="/reels">
             <Icon name="reels" />
           </Link>
-          <button onClick={() => requireAuth(() => setCreateOpen(true))} className="flex flex-col items-center justify-center gap-1 py-1 text-xs">
-            <Icon name="plus" />
+          <button
+            onClick={() => requireAuth(() => setCreateOpen(true))}
+            className="flex flex-col items-center justify-center gap-1 py-1 text-xs"
+            type="button"
+          >
+            <span className="grid h-14 w-14 place-items-center rounded-full border border-white/15 bg-gradient-to-br from-fuchsia-500/90 to-violet-600/90 shadow-[0_12px_30px_rgba(0,0,0,0.55)]">
+              <Icon name="plus" />
+            </span>
           </button>
           <button onClick={() => requireAuth(() => router.push("/chats"), "/chats")} className="relative flex flex-col items-center justify-center gap-1 py-1 text-xs" type="button">
             <Icon name="chat" />
             {unreadChats ? <span className="absolute right-4 top-1 h-2 w-2 rounded-full bg-fuchsia-500" /> : null}
           </button>
           <button onClick={() => requireAuth(() => router.push(profileHref), profileHref)} className="flex flex-col items-center justify-center gap-1 py-1 text-xs" type="button"><Icon name="user" /></button>
-          <button onClick={() => requireAuth(() => setNotifsOpen(true))} className="relative flex flex-col items-center justify-center gap-1 py-1 text-xs">
-            <Icon name="bell" />
-            {unreadNotifs ? <span className="absolute right-4 top-1 h-2 w-2 rounded-full bg-fuchsia-500" /> : null}
-          </button>
-</div>
+        </div>
       </div>
 
       {/* Search modal */}

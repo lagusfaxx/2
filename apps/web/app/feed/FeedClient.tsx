@@ -77,6 +77,15 @@ export default function FeedClient() {
         {/* Center */}
         <section className="min-w-0">
           <div className="sticky top-0 z-20 -mx-4 mb-4 border-b border-white/10 bg-black/20 px-4 pt-3 backdrop-blur-xl lg:-mx-0 lg:rounded-3xl lg:border lg:bg-white/5 lg:shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
+            {/* Top brand bar (shows on mobile too) */}
+            <div className="flex items-center justify-between pb-2">
+              <div className="w-10" />
+              <Link href="/inicio" className="flex items-center justify-center">
+                <img src="/brand/logo.png" alt="UZEED" className="h-7 w-auto opacity-95" />
+              </Link>
+              <div className="w-10" />
+            </div>
+
             <div className="flex items-end justify-center gap-8 pb-3 text-sm font-semibold">
               <button
                 type="button"
