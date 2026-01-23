@@ -95,7 +95,7 @@ function Badge({ count }: { count: number }) {
 export default function Nav() {
   const pathname = usePathname();
   const router = useRouter();
-  const { me } = useMe();
+  const { me, loading } = useMe();
 
   const [collapsed, setCollapsed] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -138,6 +138,17 @@ export default function Nav() {
     return () => clearInterval(id);
   }, [me]);
 
+  const requireAuth = (fn: () => void, nextPath?: string) => {
+    if (loading) return;
+    if (!me) {
+      const next = encodeURIComponent(nextPath || pathname || "/inicio");
+      router.push(`/login?next=${next}`);
+      return;
+    }
+    fn();
+  };
+
+
   const items = [
     { href: "/inicio", label: "Inicio", icon: "home" as const },
     { href: "/reels", label: "Reels", icon: "reels" as const },
@@ -147,7 +158,7 @@ export default function Nav() {
   const secondary = [
     { action: () => setSearchOpen(true), label: "Buscar", icon: "search" as const },
     { action: () => requireAuth(() => setNotifsOpen((o) => !o)), label: "Notificaciones", icon: "bell" as const, badge: unreadNotifs },
-    { href: "/chats", label: "Mensajes", icon: "chat" as const, badge: unreadChats },
+    { action: () => requireAuth(() => router.push("/chats")), label: "Mensajes", icon: "chat" as const, badge: unreadChats },
     { action: () => requireAuth(() => setCreateOpen(true)), label: "Crear", icon: "plus" as const },
   ];
 
