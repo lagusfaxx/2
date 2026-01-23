@@ -33,7 +33,8 @@ export default function FeedClient() {
       try {
         setPending(true);
         setError(null);
-        const data = await apiFetch('/feed');
+        // Tipar la respuesta para evitar que TS infiera {} y falle en build cuando accedemos a data.items
+        const data = await apiFetch<any>('/feed');
         const items = Array.isArray(data) ? data : (data?.items ?? []);
         if (!mounted) return;
         setPosts(items);
@@ -196,6 +197,7 @@ function PostCard({ post }: { post: AnyPost }) {
         <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
+            // resolveMediaUrl puede devolver null; en ese caso no pasamos null a <img src>
             src={resolveMediaUrl(imageUrl) ?? undefined}
             alt="post"
             className="h-auto w-full object-cover"
