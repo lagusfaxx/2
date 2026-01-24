@@ -129,8 +129,8 @@ export default function AuthForm({ mode }: { mode: Mode }) {
           <label className="text-sm text-white/70">Tipo de perfil</label>
           <div className="relative">
             <select className="input select-dark" value={profileType} onChange={(e) => setProfileType(e.target.value)}>
-              <option value="VIEWER">Persona (ver y publicar)</option>
-              <option value="CREATOR">Creadora (suscripción mensual)</option>
+              <option value="VIEWER">Usuario / Fan (seguir y suscribirte)</option>
+              <option value="CREATOR">Creador/a (suscripción mensual)</option>
               <option value="PROFESSIONAL">Profesional (contenido + servicios)</option>
               <option value="SHOP">Tienda / Motel / Sexshop</option>
             </select>
