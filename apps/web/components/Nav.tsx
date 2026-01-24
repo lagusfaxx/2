@@ -361,7 +361,7 @@ export default function Nav() {
       </div>
 
       {/* Mobile account menu */}
-      {mobileMenuOpen ? (
+      {(isAuthed && mobileMenuOpen) ? (
         <ModalShell title="Cuenta" onClose={() => setMobileMenuOpen(false)}>
           <div className="space-y-3">
             <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
