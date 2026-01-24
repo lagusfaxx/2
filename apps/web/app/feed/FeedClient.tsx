@@ -178,10 +178,12 @@ function PostCard({ post }: { post: AnyPost }) {
   const handle = post?.author?.username ? `@${post.author.username}` : '';
   const avatarUrl = post?.author?.avatarUrl || post?.author?.avatar || '';
 
-  // Media puede venir en distinto orden (y no siempre en [0]); priorizamos IMAGE y caemos a cualquier url válida.
-  const imageMedia = (post?.media || []).find((m: any) => (m?.type === 'IMAGE' || String(m?.mime || '').startsWith('image/')) && m?.url)
-    ?? (post?.media || []).find((m: any) => !!m?.url);
-  const imageUrl = (post?.imageUrl || post?.coverUrl || imageMedia?.url || '');
+  // Prefer full media, but if the API hid media due to paywall, show the preview thumbnail.
+  const imageUrl = post?.media?.[0]?.url || post?.preview?.url || post?.imageUrl || '';
+  const isPaywalled = Boolean(
+    // API v2 may include explicit paywalled flag
+    (post as any)?.paywalled || (post as any)?.isPaywalled
+  );
   const likeCount = post?.likeCount ?? post?.likesCount ?? post?._count?.likes ?? post?._count?.Like ?? 0;
   const commentCount = post?.commentCount ?? post?.commentsCount ?? post?._count?.comments ?? post?._count?.Comment ?? 0;
   const shareCount = post?.shareCount ?? 0;
@@ -206,15 +208,25 @@ function PostCard({ post }: { post: AnyPost }) {
       {post?.content && <div className="mt-3 text-sm text-white/90">{post.content}</div>}
 
       {imageUrl && (
-        <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-black/10">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            // resolveMediaUrl puede devolver null; en ese caso no pasamos null a <img src>
-            src={resolveMediaUrl(imageUrl) ?? undefined}
-            alt="post"
-            className="block w-full h-auto max-h-[70vh] object-contain bg-black/20"
-            loading="lazy"
-          />
+        <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-black/20">
+          <div className="relative">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              // resolveMediaUrl puede devolver null; en ese caso no pasamos null a <img src>
+              src={resolveMediaUrl(imageUrl) ?? undefined}
+              alt="post"
+              className="block w-full max-h-[70vh] object-contain"
+              loading="lazy"
+            />
+
+            {isPaywalled && !(post?.media?.length > 0) && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                <div className="uzeed-glass rounded-2xl px-4 py-3 text-sm font-semibold">
+                  Contenido bloqueado
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
