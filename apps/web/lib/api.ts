@@ -38,19 +38,22 @@ export function resolveMediaUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   const trimmed = String(url).trim();
   if (!trimmed) return null;
+
+  // If it's already a blob/data URL (client-side previews), keep it.
+  if (trimmed.startsWith("blob:") || trimmed.startsWith("data:")) return trimmed;
+
+  // Absolute URL? Keep it (this is the most compatible for <img> on mobile).
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
 
   const base = getApiBase();
 
   // Normalize to /path
-  const path = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  let path = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
 
-  // Uploads are served by the API under /uploads/*
-  if (path.startsWith("/uploads/")) return `${base}${path}`;
+  // Some records may store bare filenames; assume uploads
+  if (!trimmed.includes("/")) path = `/uploads/${trimmed}`;
 
-  // Some records may store bare filenames
-  if (!path.includes("/")) return `${base}/uploads/${trimmed}`;
-
+  // Ensure uploads/media are rooted (avoid double slashes)
   return `${base}${path}`;
 }
 
