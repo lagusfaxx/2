@@ -43,7 +43,7 @@ const upload = multer({
 
 async function ensureCreator(userId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { profileType: true } });
-  if (!user || !["CREATOR", "PROFESSIONAL"].includes(user.profileType)) {
+  if (!user || !["CREATOR", "PROFESSIONAL", "SHOP"].includes(user.profileType)) {
     return false;
   }
   return true;
