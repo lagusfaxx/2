@@ -177,7 +177,8 @@ const requireAuth = (fn?: () => void, nextPath?: string) => {
       // ignore
     }
     try {
-      await refresh?.();
+      // next/navigation router has refresh() in App Router
+      router.refresh();
     } catch {
       // ignore
     }
