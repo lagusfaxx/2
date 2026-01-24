@@ -98,19 +98,20 @@ function Badge({ count }: { count: number }) {
 
 export default function Nav() {
   const pathname = usePathname();
-
-const requireAuth = (fn?: () => void, nextPath?: string) => {
-  if (loading) return;
-  if (!me) {
-    const next = encodeURIComponent(nextPath ?? pathname ?? "/");
-    router.push(`/login?next=${next}`);
-    return;
-  }
-  fn?.();
-};
-
   const router = useRouter();
   const { me, loading } = useMe();
+
+  const isAuthed = !!me?.user;
+
+  const requireAuth = (fn?: () => void, nextPath?: string) => {
+    if (loading) return;
+    if (!me?.user) {
+      const next = encodeURIComponent(nextPath ?? pathname ?? "/");
+      router.push(`/login?next=${next}`);
+      return;
+    }
+    fn?.();
+  };
 
   const [collapsed, setCollapsed] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -136,7 +137,7 @@ const requireAuth = (fn?: () => void, nextPath?: string) => {
   }, [collapsed]);
 
   useEffect(() => {
-    if (!me) return;
+    if (!me?.user) return;
     const tick = async () => {
       try {
         const [n, inbox] = await Promise.all([
@@ -152,7 +153,7 @@ const requireAuth = (fn?: () => void, nextPath?: string) => {
     tick();
     const id = setInterval(tick, 20000);
     return () => clearInterval(id);
-  }, [me]);
+  }, [me?.user?.id]);
 
   const items: NavItem[] = [
     { href: "/inicio", label: "Inicio", icon: "home" as const },
@@ -167,8 +168,9 @@ const requireAuth = (fn?: () => void, nextPath?: string) => {
     { action: () => requireAuth(() => setCreateOpen(true)), label: "Crear", icon: "plus" as const },
   ];
 
-  const profileHref = me?.user?.username ? `/perfil/${me.user.username}` : "/dashboard";
+  const profileHref = me?.user?.username ? `/perfil/${me.user.username}` : "/inicio";
   const nextToLogin = `/login?next=${encodeURIComponent(pathname || "/inicio")}`;
+  const nextToRegister = `/register?next=${encodeURIComponent(pathname || "/inicio")}`;
 
   async function doLogout() {
     try {
@@ -328,15 +330,12 @@ const requireAuth = (fn?: () => void, nextPath?: string) => {
         className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-black/35 backdrop-blur-2xl"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <div className="mx-auto grid max-w-[520px] grid-cols-6 px-3 py-2">
+        <div className="mx-auto grid max-w-[520px] grid-cols-5 px-3 py-2">
           <Link className="flex flex-col items-center justify-center gap-1 py-1 text-xs" href="/inicio">
             <Icon name="home" />
           </Link>
           <Link className="flex flex-col items-center justify-center gap-1 py-1 text-xs" href="/reels">
             <Icon name="reels" />
-          </Link>
-          <Link className="flex flex-col items-center justify-center gap-1 py-1 text-xs" href="/servicios">
-            <Icon name="services" />
           </Link>
           <button
             onClick={() => requireAuth(() => setCreateOpen(true))}
@@ -352,7 +351,7 @@ const requireAuth = (fn?: () => void, nextPath?: string) => {
             {unreadChats ? <span className="absolute right-4 top-1 h-2 w-2 rounded-full bg-fuchsia-500" /> : null}
           </button>
           <button
-            onClick={() => requireAuth(() => setMobileMenuOpen(true), profileHref)}
+            onClick={() => setMobileMenuOpen(true)}
             className="flex flex-col items-center justify-center gap-1 py-1 text-xs"
             type="button"
           >
@@ -364,37 +363,109 @@ const requireAuth = (fn?: () => void, nextPath?: string) => {
       {/* Mobile account menu */}
       {mobileMenuOpen ? (
         <ModalShell title="Cuenta" onClose={() => setMobileMenuOpen(false)}>
-          <div className="space-y-2">
-            <button
-              type="button"
-              onClick={() => {
-                setMobileMenuOpen(false);
-                router.push(profileHref);
-              }}
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm text-white hover:bg-white/10"
-            >
-              Mi perfil
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMobileMenuOpen(false);
-                router.push('/dashboard');
-              }}
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm text-white hover:bg-white/10"
-            >
-              Configuración
-            </button>
-            <button
-              type="button"
-              onClick={async () => {
-                setMobileMenuOpen(false);
-                await doLogout();
-              }}
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm text-white hover:bg-white/10"
-            >
-              Cerrar sesión
-            </button>
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+              <div className="h-11 w-11 overflow-hidden rounded-full border border-white/10 bg-black/20">
+                {me?.user?.avatarUrl ? (
+                  <img
+                    src={resolveMediaUrl(me.user.avatarUrl) ?? undefined}
+                    alt={me.user.username}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-xs text-white/60">?</div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-semibold text-white">{me?.user?.displayName ?? "Invitado"}</div>
+                <div className="truncate text-xs text-white/60">
+                  {me?.user?.username ? `@${me.user.username}` : "Sin sesión"}
+                </div>
+              </div>
+            </div>
+
+            {me?.user ? (
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    router.push(profileHref);
+                  }}
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm text-white hover:bg-white/10"
+                >
+                  Mi perfil
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    router.push("/servicios");
+                  }}
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm text-white hover:bg-white/10"
+                >
+                  Servicios
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    router.push("/dashboard");
+                  }}
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm text-white hover:bg-white/10"
+                >
+                  Configuración
+                </button>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setMobileMenuOpen(false);
+                    await doLogout();
+                  }}
+                  className="w-full rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-left text-sm text-red-100 hover:bg-red-500/20"
+                >
+                  Cerrar sesión
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    router.push(nextToLogin);
+                  }}
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm text-white hover:bg-white/10"
+                >
+                  Iniciar sesión
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    router.push(nextToRegister);
+                  }}
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm text-white hover:bg-white/10"
+                >
+                  Crear cuenta
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    router.push("/servicios");
+                  }}
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm text-white hover:bg-white/10"
+                >
+                  Servicios
+                </button>
+              </div>
+            )}
           </div>
         </ModalShell>
       ) : null}
