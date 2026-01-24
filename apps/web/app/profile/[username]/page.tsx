@@ -176,10 +176,12 @@ export default function ProfilePage() {
                   <h1 className="text-2xl font-semibold">{profile.displayName || profile.username}</h1>
                   <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs text-white/70">
                     {profile.profileType === "CREATOR"
-                      ? "CREADORA"
+                      ? "CREADOR"
                       : profile.profileType === "PROFESSIONAL"
-                        ? "PROFESIONAL"
-                        : "NEGOCIO"}
+                        ? "PRO"
+                        : profile.profileType === "SHOP"
+                          ? "NEGOCIO"
+                          : "USUARIO"}
                   </span>
                 </div>
                 <div className="text-sm text-white/60">@{profile.username}</div>
