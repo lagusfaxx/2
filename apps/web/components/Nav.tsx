@@ -116,6 +116,7 @@ const requireAuth = (fn?: () => void, nextPath?: string) => {
   const [createOpen, setCreateOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [notifsOpen, setNotifsOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const [notifs, setNotifs] = useState<Notification[]>([]);
   const [unreadChats, setUnreadChats] = useState(0);
@@ -168,6 +169,20 @@ const requireAuth = (fn?: () => void, nextPath?: string) => {
 
   const profileHref = me?.user?.username ? `/perfil/${me.user.username}` : "/dashboard";
   const nextToLogin = `/login?next=${encodeURIComponent(pathname || "/inicio")}`;
+
+  async function doLogout() {
+    try {
+      await apiFetch("/auth/logout", { method: "POST" });
+    } catch {
+      // ignore
+    }
+    try {
+      await refresh?.();
+    } catch {
+      // ignore
+    }
+    router.push("/login");
+  }
 
   return (
     <>
@@ -312,12 +327,15 @@ const requireAuth = (fn?: () => void, nextPath?: string) => {
         className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-black/35 backdrop-blur-2xl"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <div className="mx-auto grid max-w-[520px] grid-cols-5 px-3 py-2">
+        <div className="mx-auto grid max-w-[520px] grid-cols-6 px-3 py-2">
           <Link className="flex flex-col items-center justify-center gap-1 py-1 text-xs" href="/inicio">
             <Icon name="home" />
           </Link>
           <Link className="flex flex-col items-center justify-center gap-1 py-1 text-xs" href="/reels">
             <Icon name="reels" />
+          </Link>
+          <Link className="flex flex-col items-center justify-center gap-1 py-1 text-xs" href="/servicios">
+            <Icon name="services" />
           </Link>
           <button
             onClick={() => requireAuth(() => setCreateOpen(true))}
@@ -332,9 +350,53 @@ const requireAuth = (fn?: () => void, nextPath?: string) => {
             <Icon name="chat" />
             {unreadChats ? <span className="absolute right-4 top-1 h-2 w-2 rounded-full bg-fuchsia-500" /> : null}
           </button>
-          <button onClick={() => requireAuth(() => router.push(profileHref), profileHref)} className="flex flex-col items-center justify-center gap-1 py-1 text-xs" type="button"><Icon name="user" /></button>
+          <button
+            onClick={() => requireAuth(() => setMobileMenuOpen(true), profileHref)}
+            className="flex flex-col items-center justify-center gap-1 py-1 text-xs"
+            type="button"
+          >
+            <Icon name="user" />
+          </button>
         </div>
       </div>
+
+      {/* Mobile account menu */}
+      {mobileMenuOpen ? (
+        <ModalShell title="Cuenta" onClose={() => setMobileMenuOpen(false)}>
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                router.push(profileHref);
+              }}
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm text-white hover:bg-white/10"
+            >
+              Mi perfil
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                router.push('/dashboard');
+              }}
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm text-white hover:bg-white/10"
+            >
+              Configuración
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                setMobileMenuOpen(false);
+                await doLogout();
+              }}
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm text-white hover:bg-white/10"
+            >
+              Cerrar sesión
+            </button>
+          </div>
+        </ModalShell>
+      ) : null}
 
       {/* Search modal */}
       {searchOpen ? <SearchModal onClose={() => setSearchOpen(false)} /> : null}
