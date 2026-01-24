@@ -81,7 +81,11 @@ export default function FeedClient() {
             <div className="flex items-center justify-between pb-2">
               <div className="w-10" />
               <Link href="/inicio" className="flex items-center justify-center">
-                <img src="/brand/logo.png" alt="UZEED" className="h-7 w-auto opacity-95" />
+                <img
+                  src="/brand/logo.png"
+                  alt="UZEED"
+                  className="h-9 w-auto opacity-95 drop-shadow-[0_2px_10px_rgba(0,0,0,0.55)] sm:h-7"
+                />
               </Link>
               <div className="w-10" />
             </div>
@@ -184,6 +188,8 @@ function PostCard({ post }: { post: AnyPost }) {
     // API v2 may include explicit paywalled flag
     (post as any)?.paywalled || (post as any)?.isPaywalled
   );
+  const isLocked = Boolean(isPaywalled && !(post?.media?.length > 0));
+  const authorProfileHref = post?.author?.username ? `/perfil/${post.author.username}` : '/inicio';
   const likeCount = post?.likeCount ?? post?.likesCount ?? post?._count?.likes ?? post?._count?.Like ?? 0;
   const commentCount = post?.commentCount ?? post?.commentsCount ?? post?._count?.comments ?? post?._count?.Comment ?? 0;
   const shareCount = post?.shareCount ?? 0;
@@ -215,14 +221,24 @@ function PostCard({ post }: { post: AnyPost }) {
               // resolveMediaUrl puede devolver null; en ese caso no pasamos null a <img src>
               src={resolveMediaUrl(imageUrl) ?? undefined}
               alt="post"
-              className="block w-full max-h-[70vh] object-contain"
+              className={
+                "block w-full max-h-[70vh] object-contain transition duration-300 " +
+                (isLocked ? " blur-2xl scale-110 brightness-75" : "")
+              }
               loading="lazy"
             />
 
-            {isPaywalled && !(post?.media?.length > 0) && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                <div className="uzeed-glass rounded-2xl px-4 py-3 text-sm font-semibold">
-                  Contenido bloqueado
+            {isLocked && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="uzeed-glass rounded-2xl px-5 py-4 text-center backdrop-blur-md">
+                  <div className="text-sm font-semibold">Contenido bloqueado</div>
+                  <div className="mt-1 text-xs text-white/70">Suscríbete para verlo</div>
+                  <Link
+                    href={authorProfileHref}
+                    className="mt-3 inline-flex items-center justify-center rounded-full border border-white/20 bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/20"
+                  >
+                    Ver perfil
+                  </Link>
                 </div>
               </div>
             )}
