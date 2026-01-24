@@ -39,21 +39,36 @@ export function resolveMediaUrl(url: string | null | undefined): string | null {
   const trimmed = String(url).trim();
   if (!trimmed) return null;
 
-  // If it's already a blob/data URL (client-side previews), keep it.
-  if (trimmed.startsWith("blob:") || trimmed.startsWith("data:")) return trimmed;
+  // Absolute URLs: keep as-is, but avoid mixed-content on https pages.
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    if (typeof window !== "undefined" && window.location.protocol === "https:") {
+      return trimmed.replace(/^http:\/\//, "https://");
+    }
+    return trimmed;
+  }
 
-  // Absolute URL? Keep it (this is the most compatible for <img> on mobile).
-  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
+  // Web-static assets (served by Next.js) must stay on the web origin.
+  // Otherwise we'll rewrite "/brand/..." to the API domain and it 404s.
+  if (
+    trimmed.startsWith("/brand/") ||
+    trimmed.startsWith("/icons/") ||
+    trimmed.startsWith("/favicon") ||
+    trimmed.startsWith("/_next/")
+  ) {
+    return trimmed;
+  }
 
   const base = getApiBase();
 
   // Normalize to /path
-  let path = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  const path = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
 
-  // Some records may store bare filenames; assume uploads
-  if (!trimmed.includes("/")) path = `/uploads/${trimmed}`;
+  // Uploads are served by the API under /uploads/*
+  if (path.startsWith("/uploads/")) return `${base}${path}`;
 
-  // Ensure uploads/media are rooted (avoid double slashes)
+  // Some records may store bare filenames
+  if (!path.includes("/")) return `${base}/uploads/${trimmed}`;
+
   return `${base}${path}`;
 }
 
