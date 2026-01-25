@@ -12,8 +12,18 @@ export async function validateUploadedFile(file: Express.Multer.File, kind: Uplo
     throw new Error("INVALID_FILE_TYPE");
   }
 
+  // iOS Safari is strict about what it can decode. To avoid "works on desktop, fails on iPhone",
+  // we restrict uploaded videos to MP4 (H.264/AAC) and MOV. If you later add transcoding,
+  // you can relax this.
+  const allowedVideoMimes = new Set(["video/mp4", "video/quicktime"]);
+
   const isImage = detected.mime.startsWith("image/");
   const isVideo = detected.mime.startsWith("video/");
+
+  if (isVideo && !allowedVideoMimes.has(detected.mime)) {
+    await cleanupFile(file.path);
+    throw new Error("UNSUPPORTED_VIDEO_FORMAT");
+  }
   if (kind === "image" && !isImage) {
     await cleanupFile(file.path);
     throw new Error("INVALID_FILE_TYPE");
