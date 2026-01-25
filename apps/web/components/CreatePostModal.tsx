@@ -60,13 +60,16 @@ export default function CreatePostModal({ isOpen, onClose, onCreated, defaultMod
       setPreviews([]);
       return;
     }
+    const allowedVideoMimes = new Set(["video/mp4", "video/quicktime"]);
     const accepted = Array.from(fileList).every((file) => {
       if (file.size > MAX_FILE_SIZE) return false;
       if (mode === "IMAGE") return file.type.startsWith("image/");
-      return file.type.startsWith("video/");
+      // iOS Safari won't play many "video/*" formats that work on desktop (most commonly WebM).
+      // We restrict selection to MP4/MOV to prevent "Reel no disponible" on iPhone.
+      return allowedVideoMimes.has((file.type || "").toLowerCase());
     });
     if (!accepted) {
-      setError("Revisa el formato y tamaño del archivo. Máximo 100MB.");
+      setError("Formato no compatible en iPhone. Usa MP4 (H.264) o MOV. Máximo 100MB.");
       return;
     }
     setError(null);
@@ -225,7 +228,7 @@ export default function CreatePostModal({ isOpen, onClose, onCreated, defaultMod
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept={mode === "IMAGE" ? "image/*" : "video/*"}
+                  accept={mode === "IMAGE" ? "image/*" : "video/mp4,video/quicktime"}
                   onChange={(e) => handleFiles(e.target.files)}
                   className="hidden"
                 />
