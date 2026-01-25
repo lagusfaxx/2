@@ -43,7 +43,9 @@ const upload = multer({
 
 async function ensureCreator(userId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { profileType: true } });
-  if (!user || !["CREATOR", "PROFESSIONAL", "SHOP"].includes(user.profileType)) {
+  // MVP behaviour: allow any authenticated user to publish (IG-like).
+  // Some older DBs may have profileType=PERSON (legacy) or VIEWER.
+  if (!user || !["CREATOR", "PROFESSIONAL", "SHOP", "VIEWER", "PERSON"].includes(user.profileType)) {
     return false;
   }
   return true;
