@@ -1,185 +1,267 @@
+import "dotenv/config";
 import express from "express";
-import path from "path";
-import fs from "fs";
-import cors from "cors";
+import cors, { type CorsOptions } from "cors";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import cookieParser from "cookie-parser";
+import session from "express-session";
+import pg from "pg";
+import PgSession from "connect-pg-simple";
+import path from "path";
+import { randomUUID } from "crypto";
+import { Prisma } from "@prisma/client";
 
-// ⚠️ Ajusta estos imports si en tu repo tienen nombres distintos
-import authRoutes from "./auth/routes";
-import feedRoutes from "./feed/routes";
-import profileRoutes from "./profile/routes";
-import creatorRoutes from "./creator/routes";
-import messagesRoutes from "./messages/routes";
-import notificationsRoutes from "./notifications/routes";
-import billingRoutes from "./billing/routes";
-
-// Si tienes middlewares propios (helmet/session), mantenlos pero DESPUÉS de /uploads
-// @ts-ignore
-import { configureHelmet } from "./lib/helmet";
-// @ts-ignore
-import { attachSession } from "./middleware/session";
+import { config } from "./config";
+import { authRouter } from "./auth/routes";
+import { ensureAdminUser } from "./auth/seedAdmin";
+import { feedRouter } from "./feed/routes";
+import { adminRouter } from "./admin/routes";
+import { khipuRouter } from "./khipu/routes";
+import { profileRouter } from "./profile/routes";
+import { servicesRouter } from "./services/routes";
+import { messagesRouter } from "./messages/routes";
+import { creatorRouter } from "./creator/routes";
+import { billingRouter } from "./billing/routes";
+import { notificationsRouter } from "./notifications/routes";
+import { KhipuError } from "./khipu/client";
+import { statsRouter } from "./stats/routes";
+import { prisma } from "./db";
 
 const app = express();
 
-/**
- * =========================================================
- * 1) CORS
- * =========================================================
- */
+// IMPORTANTE para Coolify/Cloudflare/Proxies (cookies + https)
+app.set("trust proxy", 1);
+
+// Seguridad headers
 app.use(
-  cors({
-    origin: [
-      "https://uzeed.cl",
-      "https://www.uzeed.cl",
-      "http://localhost:3000",
-      "http://127.0.0.1:3000",
-    ],
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "X-Requested-With",
-      "X-Request-Id",
-    ],
-    exposedHeaders: ["Accept-Ranges", "Content-Range", "Content-Length"],
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" }
   })
 );
 
-/**
- * =========================================================
- * 2) BODY + COOKIES
- * =========================================================
- */
-app.use(express.json({ limit: "25mb" }));
-app.use(express.urlencoded({ extended: true, limit: "25mb" }));
+// CORS
+const corsOrigins = Array.from(
+  new Set([
+    "https://uzeed.cl",
+    "https://www.uzeed.cl",
+    ...config.corsOrigin
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+  ])
+);
+
+const corsOptions: CorsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (corsOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error("CORS_NOT_ALLOWED"));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "X-Request-Id"],
+  exposedHeaders: ["X-Request-Id", "Accept-Ranges", "Content-Range", "Content-Length"]
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
+
+// Rate limit
+app.use(
+  rateLimit({
+    windowMs: 60 * 1000,
+    limit: 120,
+    standardHeaders: true,
+    legacyHeaders: false
+  })
+);
+
 app.use(cookieParser());
 
+// Request ID
+app.use((req, res, next) => {
+  const requestId = req.header("x-request-id") || randomUUID();
+  (req as any).requestId = requestId;
+  res.setHeader("x-request-id", requestId);
+  next();
+});
+
+// JSON body, excepto webhooks Khipu (raw body)
+app.use((req, res, next) => {
+  if (req.path.startsWith("/webhooks/khipu")) {
+    express.raw({ type: "application/json" })(req, res, (err) => {
+      if (err) return next(err);
+      (req as any).rawBody = req.body;
+      try {
+        req.body = JSON.parse((req.body as Buffer).toString("utf8"));
+      } catch {
+        req.body = {};
+      }
+      return next();
+    });
+  } else {
+    express.json({ limit: "50mb" })(req, res, next);
+  }
+});
+
 /**
- * =========================================================
- * ✅ 3) UPLOADS PUBLICO (FIX FINAL)
- * =========================================================
- * IMPORTANTE: Esto DEBE ir ANTES de cualquier sesión/auth.
- * Porque tu CURL mostraba: /uploads/*.mp4 -> 401 (JSON)
- * iPhone NO reproduce si /uploads requiere cookies.
+ * ✅ UPLOADS PÚBLICOS (ANTES DE SESSION)
+ * - No requiere cookies
+ * - Permite Range requests (iOS/Android + Cloudflare)
+ * - CORS solo en allowlist
  */
-const UPLOADS_DIR = process.env.UPLOADS_DIR || "uploads";
-const UPLOADS_PATH = path.join(process.cwd(), UPLOADS_DIR);
-
-if (!fs.existsSync(UPLOADS_PATH)) {
-  fs.mkdirSync(UPLOADS_PATH, { recursive: true });
-}
-
-// Handler público para static files
 app.use(
   "/uploads",
-  express.static(UPLOADS_PATH, {
-    fallthrough: true,
+  (req, res, next) => {
+    const origin = req.headers.origin;
+
+    if (origin && corsOrigins.includes(origin)) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Vary", "Origin");
+    }
+
+    // Para media: NO credenciales
+    res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, X-Request-Id");
+    res.setHeader("Access-Control-Expose-Headers", "Accept-Ranges, Content-Range, Content-Length");
+
+    // Para que el navegador permita usar el recurso cross-site
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+
+    // Range requests
+    res.setHeader("Accept-Ranges", "bytes");
+
+    // Responder preflight rápido
+    if (req.method === "OPTIONS") return res.sendStatus(204);
+
+    next();
+  },
+  express.static(path.resolve(config.storageDir), {
+    maxAge: "1h",
     setHeaders: (res) => {
-      // Permitir que la web (uzeed.cl) cargue videos/imagenes desde api.uzeed.cl
-      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-      res.setHeader("Access-Control-Allow-Origin", "https://uzeed.cl");
-      res.setHeader("Access-Control-Allow-Credentials", "true");
+      // Range siempre disponible (videos)
       res.setHeader("Accept-Ranges", "bytes");
-      res.setHeader("X-Content-Type-Options", "nosniff");
-    },
+      // Evita transformaciones raras en proxies
+      res.setHeader("Cache-Control", "public, max-age=3600");
+    }
   })
 );
 
-/**
- * =========================================================
- * ✅ 4) STREAMING RANGE (206) PARA iOS SAFARI
- * =========================================================
- * iOS suele pedir Range: bytes=0-
- * express.static a veces funciona, pero con proxies/CF puede fallar.
- * Este endpoint asegura 206 + Content-Range para .mp4 cuando llega Range.
- */
-app.get("/uploads/:file", (req, res, next) => {
-  const file = req.params.file;
+// Session (DESPUÉS de uploads para que uploads jamás dependa de auth/cookies)
+const pgPool = new pg.Pool({ connectionString: config.databaseUrl });
+const PgStore = PgSession(session);
 
-  // solo para videos mp4 (puedes ampliar si quieres)
-  if (!file.toLowerCase().endsWith(".mp4")) return next();
+app.use(
+  session({
+    name: "uzeed_session",
+    secret: config.sessionSecret,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: config.env !== "development",
+      domain: config.cookieDomain,
+      maxAge: 1000 * 60 * 60 * 24 * 30
+    },
+    store: new PgStore({
+      pool: pgPool,
+      tableName: "session",
+      createTableIfMissing: true
+    })
+  })
+);
 
-  const filePath = path.join(UPLOADS_PATH, file);
-  if (!fs.existsSync(filePath)) return res.status(404).end();
+// Health
+app.get("/health", (_req, res) => res.json({ ok: true }));
+app.get("/ready", async (_req, res) => {
+  try {
+    await prisma.$queryRawUnsafe("SELECT 1");
+    return res.json({ ok: true });
+  } catch {
+    return res.status(500).json({ ok: false, error: "DB_NOT_READY" });
+  }
+});
+app.get("/version", (_req, res) =>
+  res.json({ sha: process.env.GIT_SHA || "unknown", env: config.env })
+);
 
-  const stat = fs.statSync(filePath);
-  const fileSize = stat.size;
-  const range = req.headers.range;
+// Routes
+app.use("/auth", authRouter);
+app.use("/", feedRouter);
+app.use("/admin", adminRouter);
+app.use("/", khipuRouter);
+app.use("/", profileRouter);
+app.use("/", servicesRouter);
+app.use("/", messagesRouter);
+app.use("/", creatorRouter);
+app.use("/", billingRouter);
+app.use("/", notificationsRouter);
+app.use("/", statsRouter);
 
-  // Headers básicos
-  res.setHeader("Content-Type", "video/mp4");
-  res.setHeader("Accept-Ranges", "bytes");
-  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-  res.setHeader("Access-Control-Allow-Origin", "https://uzeed.cl");
-  res.setHeader("Access-Control-Allow-Credentials", "true");
+// Error handler
+app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const requestId = (req as any).requestId;
 
-  // Si no viene Range, servir completo
-  if (!range) {
-    res.setHeader("Content-Length", fileSize);
-    fs.createReadStream(filePath).pipe(res);
-    return;
+  console.error(
+    JSON.stringify({
+      level: "error",
+      requestId,
+      route: req.originalUrl,
+      message: err?.message || "Unknown error",
+      code: err?.code
+    })
+  );
+
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    if (err.code === "P2021" || err.code === "P2022") {
+      return res.status(500).json({ error: "DB_SCHEMA_MISMATCH" });
+    }
   }
 
-  // Parse Range: bytes=start-end
-  const parts = range.replace(/bytes=/, "").split("-");
-  const start = parseInt(parts[0], 10);
-  const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-
-  // Validación básica
-  if (isNaN(start) || isNaN(end) || start > end || end >= fileSize) {
-    res.status(416).setHeader("Content-Range", `bytes */${fileSize}`).end();
-    return;
+  if (err instanceof KhipuError) {
+    const hint =
+      err.status === 404
+        ? "Khipu devolvió 404. Revisa KHIPU_BASE_URL (prod vs sandbox) y que apunte a la API correcta."
+        : undefined;
+    return res.status(502).json({ error: "KHIPU_ERROR", status: err.status, message: err.message, hint });
   }
 
-  const chunkSize = end - start + 1;
+  if (typeof err?.message === "string" && err.message.startsWith("Khipu")) {
+    return res.status(502).json({ error: "KHIPU_ERROR" });
+  }
 
-  res.status(206);
-  res.setHeader("Content-Range", `bytes ${start}-${end}/${fileSize}`);
-  res.setHeader("Content-Length", chunkSize);
+  if (err?.message === "CORS_NOT_ALLOWED") {
+    return res.status(403).json({ error: "CORS_NOT_ALLOWED" });
+  }
 
-  fs.createReadStream(filePath, { start, end }).pipe(res);
+  if (err?.message === "INVALID_FILE_TYPE") {
+    return res.status(400).json({ error: "INVALID_FILE_TYPE" });
+  }
+
+  if (err?.message === "FILE_TOO_LARGE" || err?.code === "LIMIT_FILE_SIZE") {
+    return res.status(400).json({ error: "FILE_TOO_LARGE" });
+  }
+
+  return res.status(500).json({ error: "INTERNAL_SERVER_ERROR" });
 });
 
-/**
- * =========================================================
- * 5) HELMET / SESSION (DESPUES DE UPLOADS!)
- * =========================================================
- * Si tu repo no tiene configureHelmet o attachSession, puedes borrar try/catch.
- */
-try {
-  configureHelmet(app);
-} catch {}
+// Boot
+const port = config.port || 3001;
 
-try {
-  app.use(attachSession());
-} catch {}
+async function boot() {
+  try {
+    // opcional: si quieres forzar seed admin
+    // await ensureAdminUser();
 
-/**
- * =========================================================
- * 6) ROUTES
- * =========================================================
- */
-app.get("/health", (_req, res) => res.status(200).json({ ok: true }));
+    app.listen(port, () => {
+      console.log(`[api] listening on :${port} env=${config.env}`);
+      console.log(`[api] uploads dir: ${path.resolve(config.storageDir)}`);
+    });
+  } catch (err) {
+    console.error("[api] boot failed", err);
+    process.exit(1);
+  }
+}
 
-app.use("/auth", authRoutes);
-app.use("/feed", feedRoutes);
-app.use("/profile", profileRoutes);
-app.use("/creator", creatorRoutes);
-app.use("/messages", messagesRoutes);
-app.use("/notifications", notificationsRoutes);
-app.use("/billing", billingRoutes);
-
-/**
- * =========================================================
- * 7) 404
- * =========================================================
- */
-app.use((_req, res) => {
-  res.status(404).json({ error: "Not found" });
-});
-
-const PORT = Number(process.env.PORT || 3001);
-app.listen(PORT, () => {
-  console.log(`[api] listening on :${PORT}`);
-});
+boot();
