@@ -2,7 +2,10 @@ FROM node:20-bullseye-slim AS base
 WORKDIR /app
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
-RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+# ffmpeg/ffprobe are required to make uploaded videos iOS/Safari compatible (H.264/AAC + faststart)
+RUN apt-get update -y \
+  && apt-get install -y openssl ffmpeg \
+  && rm -rf /var/lib/apt/lists/*
 RUN corepack enable
 
 # Install deps (workspace-aware)
@@ -41,7 +44,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
-RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update -y \
+  && apt-get install -y openssl ffmpeg \
+  && rm -rf /var/lib/apt/lists/*
 COPY --from=build /pnpm /pnpm
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/prisma ./prisma
@@ -54,3 +59,4 @@ RUN chmod +x ./docker-entrypoint.sh
 EXPOSE 3001
 ENTRYPOINT ["./docker-entrypoint.sh"]
 CMD ["node", "apps/api/dist/index.js"]
+
