@@ -6,7 +6,8 @@ import { requireAuth } from "../auth/middleware";
 import { CreatePostSchema } from "@uzeed/shared";
 import { config } from "../config";
 import { LocalStorageProvider } from "../storage/local";
-import { validateUploadedFile } from "../lib/uploads";
+import fs from "fs/promises";
+import { normalizeVideoForIOS, validateUploadedFile } from "../lib/uploads";
 import { asyncHandler } from "../lib/asyncHandler";
 
 export const creatorRouter = Router();
@@ -43,9 +44,9 @@ const upload = multer({
 
 async function ensureCreator(userId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { profileType: true } });
-  // MVP behaviour: allow any authenticated user to publish (IG-like).
-  // Some older DBs may have profileType=PERSON (legacy) or VIEWER.
-  if (!user || !["CREATOR", "PROFESSIONAL", "SHOP", "VIEWER", "PERSON"].includes(user.profileType)) {
+  // MVP behavior (IG-like): allow any authenticated user to post.
+  // If you later want to restrict posting to creators, tighten this list and add a proper "upgrade" flow.
+  if (!user || !["CREATOR", "PROFESSIONAL", "SHOP", "PERSON", "VIEWER"].includes(user.profileType)) {
     return false;
   }
   return true;
@@ -97,7 +98,24 @@ creatorRouter.post("/posts/mine", upload.array("files", 10), asyncHandler(async 
   const media = [];
   for (const file of files) {
     const { type } = await validateUploadedFile(file, "image-or-video");
-    const url = storageProvider.publicUrl(file.filename);
+
+    // iOS Safari often fails to play "MP4" that are actually HEVC/H.265 or have unsupported audio.
+    // Normalize videos to H.264/AAC + faststart when needed.
+    let finalFilename = file.filename;
+    if (type === "VIDEO") {
+      const { outputPath, changed } = await normalizeVideoForIOS(file.path);
+      if (changed) {
+        finalFilename = path.basename(outputPath);
+        // Remove original to keep storage clean
+        try {
+          await fs.unlink(file.path);
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    const url = storageProvider.publicUrl(finalFilename);
     media.push(await prisma.media.create({ data: { postId: post.id, type, url } }));
   }
   const hasVideo = media.some((m) => m.type === "VIDEO");
@@ -154,7 +172,21 @@ creatorRouter.post("/creator/posts", upload.array("files", 10), asyncHandler(asy
   const media = [];
   for (const file of files) {
     const { type } = await validateUploadedFile(file, "image-or-video");
-    const url = storageProvider.publicUrl(file.filename);
+
+    let finalFilename = file.filename;
+    if (type === "VIDEO") {
+      const { outputPath, changed } = await normalizeVideoForIOS(file.path);
+      if (changed) {
+        finalFilename = path.basename(outputPath);
+        try {
+          await fs.unlink(file.path);
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    const url = storageProvider.publicUrl(finalFilename);
     media.push(await prisma.media.create({ data: { postId: post.id, type, url } }));
   }
   const hasVideo = media.some((m) => m.type === "VIDEO");
