@@ -53,8 +53,18 @@ app.use("/webhooks", webhooksRouter);
 app.use(express.json({ limit: "2mb" }));
 
 // Serve uploaded files (local provider)
+// NOTE: The web app runs on a different origin (e.g. https://uzeed.cl) than the API (https://api.uzeed.cl).
+// Some browsers (notably iOS Safari) can block <video>/<img> loading across origins when the API replies with
+// "Cross-Origin-Resource-Policy: same-origin". We explicitly allow cross-origin for static uploads.
 const uploadsPath = path.join(process.cwd(), env.UPLOADS_DIR);
-app.use("/uploads", express.static(uploadsPath));
+app.use(
+  "/uploads",
+  (_req, res, next) => {
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    next();
+  },
+  express.static(uploadsPath)
+);
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
