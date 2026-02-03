@@ -35,11 +35,15 @@ export default function ChatPage() {
   const [attachment, setAttachment] = useState<File | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [legalAccepted, setLegalAccepted] = useState(false);
+  const [serviceRequestId, setServiceRequestId] = useState<string | null>(null);
+  const [serviceStatus, setServiceStatus] = useState<string | null>(null);
 
   async function load() {
-    const [meResp, msgResp] = await Promise.all([
+    const [meResp, msgResp, requestResp] = await Promise.all([
       apiFetch<MeResponse>("/auth/me"),
-      apiFetch<{ messages: Message[]; other: ChatUser }>(`/messages/${userId}`)
+      apiFetch<{ messages: Message[]; other: ChatUser }>(`/messages/${userId}`),
+      apiFetch<{ requests: any[] }>(`/services/requests?as=client`)
     ]);
     if (!meResp.user) {
       window.location.href = "/login";
@@ -48,6 +52,11 @@ export default function ChatPage() {
     setMe(meResp.user);
     setMessages(msgResp.messages);
     setOther(msgResp.other);
+    const existing = requestResp.requests.find((r) => r.professional?.id === userId);
+    if (existing) {
+      setServiceRequestId(existing.id);
+      setServiceStatus(existing.status);
+    }
   }
 
   useEffect(() => {
@@ -62,8 +71,45 @@ export default function ChatPage() {
       .finally(() => setLoading(false));
   }, [userId]);
 
+  useEffect(() => {
+    const source = new EventSource(`${API_URL}/realtime/stream`, { withCredentials: true });
+    const onMessage = (event: MessageEvent) => {
+      try {
+        const payload = JSON.parse(event.data) as { message: Message };
+        const message = payload.message;
+        if (message.fromId === userId || message.toId === userId) {
+          setMessages((prev) => [...prev, message]);
+        }
+      } catch {
+        return;
+      }
+    };
+    const onService = (event: MessageEvent) => {
+      try {
+        const payload = JSON.parse(event.data) as { requestId: string; status: string; professionalId: string; clientId: string };
+        if (payload.professionalId === userId || payload.clientId === userId) {
+          setServiceRequestId(payload.requestId);
+          setServiceStatus(payload.status);
+        }
+      } catch {
+        return;
+      }
+    };
+
+    source.addEventListener("message:new", onMessage as EventListener);
+    source.addEventListener("service:update", onService as EventListener);
+    source.addEventListener("service:request", onService as EventListener);
+    return () => {
+      source.close();
+    };
+  }, [userId]);
+
   async function send(e: React.FormEvent) {
     e.preventDefault();
+    if (!legalAccepted) {
+      setError("Debes aceptar la advertencia legal antes de chatear.");
+      return;
+    }
     if (!body.trim() && !attachment) return;
     try {
       if (attachment) {
@@ -126,6 +172,18 @@ export default function ChatPage() {
       </div>
 
       <div className="card p-6">
+        <div className="mb-4 rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-xs text-amber-100">
+          Advertencia legal: este chat es interno y sujeto a normas de seguridad. Al continuar aceptas el uso responsable
+          de la plataforma.
+          <label className="mt-3 flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={legalAccepted}
+              onChange={(e) => setLegalAccepted(e.target.checked)}
+            />
+            Acepto la advertencia legal.
+          </label>
+        </div>
         <div className="grid gap-3 max-h-[420px] overflow-y-auto pr-2">
           {messages.map((m) => {
             const isImage = m.body.startsWith("ATTACHMENT_IMAGE:");
@@ -166,6 +224,28 @@ export default function ChatPage() {
           />
           <button className="btn-primary">Enviar</button>
         </form>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            className="btn-secondary"
+            onClick={async () => {
+              try {
+                const res = await apiFetch<{ request: { id: string; status: string } }>("/services/requests", {
+                  method: "POST",
+                  body: JSON.stringify({ professionalId: userId })
+                });
+                setServiceRequestId(res.request.id);
+                setServiceStatus(res.request.status);
+              } catch (e: any) {
+                setError(e?.message || "No se pudo solicitar el servicio");
+              }
+            }}
+          >
+            SOLICITAR SERVICIO
+          </button>
+          {serviceStatus ? (
+            <span className="text-xs text-white/60">Estado: {serviceStatus}</span>
+          ) : null}
+        </div>
       </div>
     </div>
   );
