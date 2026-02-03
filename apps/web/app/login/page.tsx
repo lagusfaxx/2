@@ -1,33 +1,31 @@
-import AuthForm from "../../components/AuthForm";
+import Image from "next/image";
 import Link from "next/link";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 export default function LoginPage() {
   return (
-    <div className="max-w-md mx-auto card p-8 relative overflow-hidden">
-      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-purple-400/60 via-sky-400/60 to-transparent" />
-      <h1 className="text-2xl font-semibold">Ingresar</h1>
-      <p className="mt-2 text-sm text-white/60">Accede a tu cuenta para continuar.</p>
-
-      <div className="mt-6">
-        <AuthForm mode="login" />
-      </div>
-
-      <div className="mt-4 flex items-center justify-between text-sm text-white/60">
-        <Link href="/forgot-password" className="text-white underline">
-          ¿Olvidaste tu contraseña?
-        </Link>
-        <Link href="/register" className="text-white/80 underline">
-          Crear cuenta
-        </Link>
-      </div>
-
-      <div className="mt-6 text-xs text-white/50">
-        Si tienes problemas para ingresar, contáctanos en{" "}
-        <a className="text-white underline" href="mailto:soporte@uzeed.cl">
-          soporte@uzeed.cl
-        </a>
-        .
-      </div>
+    <div className="flex min-h-screen items-center justify-center bg-background px-6">
+      <Card className="w-full max-w-md glass">
+        <CardContent className="space-y-6">
+          <div className="flex items-center gap-3">
+            <Image src="/logo-placeholder.svg" alt="UZEED" width={48} height={48} />
+            <div>
+              <p className="text-lg font-semibold">UZEED</p>
+              <p className="text-xs text-muted-foreground">Ingreso seguro</p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <Input placeholder="Email" type="email" />
+            <Input placeholder="Password" type="password" />
+          </div>
+          <Button className="w-full">Ingresar</Button>
+          <p className="text-center text-sm text-muted-foreground">
+            ¿No tienes cuenta? <Link href="/register" className="text-primary">Regístrate</Link>
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }

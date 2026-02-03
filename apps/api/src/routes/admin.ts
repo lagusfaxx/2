@@ -1,67 +1,114 @@
 import { Router } from "express";
-import multer from "multer";
-import { prisma } from "../lib/prisma";
-import { requireAdmin } from "../lib/auth";
-import { LocalStorageProvider } from "../storage/local";
-import { env } from "../lib/env";
-import path from "node:path";
+import prisma from "../lib/prisma";
+import { authRequired, roleRequired } from "../lib/auth";
 
-export const adminRouter = Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
-const storage = new LocalStorageProvider(env.API_BASE_URL, path.join(process.cwd(), env.UPLOADS_DIR));
+const router = Router();
 
-adminRouter.get("/admin/posts", requireAdmin, async (req, res) => {
-  const posts = await prisma.post.findMany({ orderBy: { createdAt: "desc" }, include: { media: true } });
-  res.json({ posts });
+router.use(authRequired, roleRequired(["ADMIN"]));
+
+router.get("/dashboard", async (_req, res) => {
+  const [users, professionals, services] = await Promise.all([
+    prisma.user.count(),
+    prisma.professionalProfile.count(),
+    prisma.serviceRequest.count()
+  ]);
+  res.json({ metrics: { users, professionals, services } });
 });
 
-adminRouter.post("/admin/posts", requireAdmin, upload.array("files", 10), async (req, res) => {
-  const { title, body, isPublic } = req.body as Record<string, string>;
-  if (!title || !body) return res.status(400).json({ error: "BAD_REQUEST" });
-  const authorId = req.session.userId!;
-  const created = await prisma.post.create({
-    data: {
-      title,
-      body,
-      isPublic: isPublic === "true",
-      authorId
-    }
+router.get("/users", async (_req, res) => {
+  const users = await prisma.user.findMany({ include: { profile: true } });
+  res.json({ users });
+});
+
+router.put("/users/:id", async (req, res) => {
+  const user = await prisma.user.update({
+    where: { id: req.params.id },
+    data: req.body
   });
-
-  const files = (req.files as Express.Multer.File[]) ?? [];
-  const media = [] as any[];
-  for (const f of files) {
-    const folder = created.id;
-    const mime = f.mimetype;
-    const type = mime.startsWith("video/") ? "VIDEO" : "IMAGE";
-    const stored = await storage.save({ buffer: f.buffer, filename: f.originalname, mimeType: mime, folder });
-    const m = await prisma.media.create({ data: { postId: created.id, type, url: stored.url } });
-    media.push(m);
-  }
-
-  res.json({ post: { ...created, media } });
+  res.json({ user });
 });
 
-adminRouter.put("/admin/posts/:id", requireAdmin, async (req, res) => {
-  const { id } = req.params;
-  const { title, body, isPublic } = req.body as { title?: string; body?: string; isPublic?: boolean };
-  const updated = await prisma.post.update({ where: { id }, data: { title, body, isPublic } });
-  res.json({ post: updated });
+router.get("/categories", async (_req, res) => {
+  const categories = await prisma.category.findMany();
+  res.json({ categories });
 });
 
-adminRouter.post("/admin/posts/:id/media", requireAdmin, upload.array("files", 10), async (req, res) => {
-  const { id } = req.params;
-  const exists = await prisma.post.findUnique({ where: { id } });
-  if (!exists) return res.status(404).json({ error: "NOT_FOUND" });
-  const files = (req.files as Express.Multer.File[]) ?? [];
-  const created = [];
-  for (const f of files) {
-    const folder = id;
-    const mime = f.mimetype;
-    const type = mime.startsWith("video/") ? "VIDEO" : "IMAGE";
-    const stored = await storage.save({ buffer: f.buffer, filename: f.originalname, mimeType: mime, folder });
-    const m = await prisma.media.create({ data: { postId: id, type, url: stored.url } });
-    created.push(m);
-  }
-  res.json({ media: created });
+router.post("/categories", async (req, res) => {
+  const category = await prisma.category.create({ data: req.body });
+  res.json({ category });
 });
+
+router.put("/categories/:id", async (req, res) => {
+  const category = await prisma.category.update({ where: { id: req.params.id }, data: req.body });
+  res.json({ category });
+});
+
+router.delete("/categories/:id", async (req, res) => {
+  await prisma.category.delete({ where: { id: req.params.id } });
+  res.json({ ok: true });
+});
+
+router.get("/establishments", async (_req, res) => {
+  const establishments = await prisma.establishment.findMany({ include: { category: true } });
+  res.json({ establishments });
+});
+
+router.post("/establishments", async (req, res) => {
+  const establishment = await prisma.establishment.create({ data: req.body });
+  res.json({ establishment });
+});
+
+router.put("/establishments/:id", async (req, res) => {
+  const establishment = await prisma.establishment.update({ where: { id: req.params.id }, data: req.body });
+  res.json({ establishment });
+});
+
+router.delete("/establishments/:id", async (req, res) => {
+  await prisma.establishment.delete({ where: { id: req.params.id } });
+  res.json({ ok: true });
+});
+
+router.get("/services", async (_req, res) => {
+  const services = await prisma.serviceRequest.findMany({ include: { professionalProfile: true } });
+  res.json({ services });
+});
+
+router.put("/services/:id", async (req, res) => {
+  const service = await prisma.serviceRequest.update({ where: { id: req.params.id }, data: req.body });
+  res.json({ service });
+});
+
+router.get("/ratings", async (_req, res) => {
+  const [professionals, establishments] = await Promise.all([
+    prisma.ratingProfessional.findMany(),
+    prisma.ratingEstablishment.findMany()
+  ]);
+  res.json({ professionals, establishments });
+});
+
+router.get("/conversations", async (_req, res) => {
+  const conversations = await prisma.conversation.findMany({ include: { messages: true } });
+  res.json({ conversations });
+});
+
+router.get("/plans", async (_req, res) => {
+  const plans = await prisma.plan.findMany();
+  res.json({ plans });
+});
+
+router.post("/plans", async (req, res) => {
+  const plan = await prisma.plan.create({ data: req.body });
+  res.json({ plan });
+});
+
+router.put("/plans/:id", async (req, res) => {
+  const plan = await prisma.plan.update({ where: { id: req.params.id }, data: req.body });
+  res.json({ plan });
+});
+
+router.get("/audit-logs", async (_req, res) => {
+  const logs = await prisma.adminActionLog.findMany({ orderBy: { createdAt: "desc" } });
+  res.json({ logs });
+});
+
+export default router;

@@ -1,28 +1,49 @@
-# UZEED
+# UZEED Monorepo
 
-Plataforma de suscripción mensual tipo OnlyFans para Chile (Khipu), con paywall, perfiles, servicios y sesiones seguras.
+UZEED es una plataforma premium para conectar clientes con profesionales y establecimientos. Este repositorio está preparado para deploy inmediato en Coolify.
 
-## Estructura
-- `apps/web` Next.js 14 App Router (UI)
-- `apps/api` Node.js + Express (API)
-- `packages/shared` tipos y schemas (compila a JS)
-- `prisma` schema + migrations
-- `infra` docker-compose dev
+## Stack
+- **Web:** Next.js 14 (App Router) + Tailwind + shadcn/ui + Framer Motion
+- **API:** Express + Socket.IO
+- **DB:** Postgres + Prisma
+- **Pagos:** Khipu PAC v1.0
 
-## Reglas críticas
-- Node en producción ejecuta **solo JS** (api y shared compilan a CJS)
-- Backend-first: DB + API es la fuente de verdad
+## Requisitos
+- Node.js 20+
+- pnpm
+- Postgres
 
-## Dev local (Docker)
-1) Copia `.env.example` a `.env` y ajusta valores.
-2) Ejecuta:
+## Variables de entorno
+Copia `.env.example` y completa los valores:
+
 ```bash
-cd infra
-docker compose -f docker-compose.dev.yml up --build
+cp .env.example .env
 ```
-3) Abre:
-- Web: http://localhost:3000
-- API: http://localhost:3001/health
 
-## Deploy
-Ver `docs/COOLIFY.md`
+> **Assets:** El logo oficial y las imágenes de fondo deben reemplazar los placeholders ubicados en `apps/web/public/logo-placeholder.svg` y `apps/web/public/hero-placeholder.svg`.
+
+## Scripts
+
+```bash
+pnpm install
+pnpm --filter @uzeed/prisma migrate:deploy
+pnpm --filter @uzeed/prisma seed
+pnpm dev
+```
+
+## Deploy en Coolify
+1. **Servicios:**
+   - Database (Postgres)
+   - API (apps/api) puerto `3001`
+   - Web (apps/web) puerto `3000`
+2. **Orden recomendado:** Database → API → Web
+3. Variables `.env` configuradas en cada servicio.
+4. Ejecutar `pnpm --filter @uzeed/prisma migrate:deploy` en la API como comando de prestart.
+
+## Puertos
+- Web: `3000`
+- API: `3001`
+
+## Socket.IO
+El frontend se conecta vía `NEXT_PUBLIC_API_URL` con `?userId=` para presencia y chat.
+

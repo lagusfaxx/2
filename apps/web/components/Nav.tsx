@@ -17,10 +17,10 @@ type Notification = {
 };
 
 // Navigation item types (avoid TS union inference issues)
-type NavItem = { href: string; label: string; icon: "home" | "reels" | "services" };
+type NavItem = { href: string; label: string; icon: "home" | "reels" | "services" | "heart" | "clipboard" };
 type SecondaryItem = { label: string; icon: "search" | "bell" | "chat" | "plus"; href?: string; action?: () => void; badge?: number };
 
-function Icon({ name }: { name: "home" | "reels" | "services" | "search" | "bell" | "chat" | "plus" | "settings" | "user" }) {
+function Icon({ name }: { name: "home" | "reels" | "services" | "heart" | "clipboard" | "search" | "bell" | "chat" | "plus" | "settings" | "user" }) {
   const common = "h-5 w-5";
   switch (name) {
     case "home":
@@ -42,6 +42,19 @@ function Icon({ name }: { name: "home" | "reels" | "services" | "search" | "bell
         <svg className={common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
           <path d="M12 21s7-4.5 7-11a7 7 0 1 0-14 0c0 6.5 7 11 7 11Z" />
           <path d="M12 10.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" />
+        </svg>
+      );
+    case "heart":
+      return (
+        <svg className={common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M12 20s-7-4.4-9-8.5C1 7.5 3.4 4 7.2 4c2 0 3.4 1.1 4.8 2.6C13.4 5.1 14.8 4 16.8 4 20.6 4 23 7.5 21 11.5 19 15.6 12 20 12 20Z" />
+        </svg>
+      );
+    case "clipboard":
+      return (
+        <svg className={common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <rect x="6" y="4" width="12" height="16" rx="2" />
+          <path d="M9 4h6M9 9h6M9 13h6" />
         </svg>
       );
     case "search":
@@ -158,7 +171,9 @@ export default function Nav() {
   const items: NavItem[] = [
     { href: "/inicio", label: "Inicio", icon: "home" as const },
     { href: "/reels", label: "Reels", icon: "reels" as const },
+    { href: "/favoritos", label: "Favoritos", icon: "heart" as const },
     { href: "/servicios", label: "Servicios", icon: "services" as const },
+    { href: "/servicios-activos", label: "Activos", icon: "clipboard" as const },
   ];
 
   const secondary: SecondaryItem[] = [

@@ -1,16 +1,36 @@
-import type { Request, Response, NextFunction } from "express";
-import { prisma } from "./prisma";
+import jwt from "jsonwebtoken";
+import { Request, Response, NextFunction } from "express";
+import { env } from "./env";
 
-export async function requireAuth(req: Request, res: Response, next: NextFunction) {
-  const userId = req.session.userId;
-  if (!userId) return res.status(401).json({ error: "UNAUTHENTICATED" });
-  next();
-}
+export type SessionPayload = {
+  userId: string;
+  role: "CLIENT" | "PROFESSIONAL" | "ADMIN";
+};
 
-export async function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  const userId = req.session.userId;
-  if (!userId) return res.status(401).json({ error: "UNAUTHENTICATED" });
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
-  if (!user || user.role !== "ADMIN") return res.status(403).json({ error: "FORBIDDEN" });
-  next();
-}
+export const createSessionToken = (payload: SessionPayload) =>
+  jwt.sign(payload, env.SESSION_SECRET, { expiresIn: "7d" });
+
+export const verifySessionToken = (token: string) =>
+  jwt.verify(token, env.SESSION_SECRET) as SessionPayload;
+
+export const authRequired = (req: Request, res: Response, next: NextFunction) => {
+  const token = req.cookies?.session;
+  if (!token) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  try {
+    const payload = verifySessionToken(token);
+    req.user = payload;
+    return next();
+  } catch (error) {
+    return res.status(401).json({ error: "Invalid session" });
+  }
+};
+
+export const roleRequired = (roles: SessionPayload["role"][]) =>
+  (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    return next();
+  };

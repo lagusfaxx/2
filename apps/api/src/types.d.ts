@@ -1,8 +1,9 @@
-import "express-session";
+import { SessionPayload } from "./lib/auth";
 
-declare module "express-session" {
-  interface SessionData {
-    userId?: string;
-    role?: "USER" | "ADMIN";
+declare global {
+  namespace Express {
+    interface Request {
+      user?: SessionPayload;
+    }
   }
 }

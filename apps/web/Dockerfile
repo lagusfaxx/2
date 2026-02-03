@@ -1,42 +1,19 @@
-# syntax=docker/dockerfile:1
-
-FROM node:20-bookworm-slim AS deps
+FROM node:20-alpine AS base
 WORKDIR /app
-ENV NODE_ENV=development
-ENV PNPM_HOME=/pnpm
-ENV PATH=$PNPM_HOME:$PATH
-RUN corepack enable
-COPY package.json pnpm-workspace.yaml tsconfig.base.json ./
-COPY packages/shared/package.json packages/shared/tsconfig.json ./packages/shared/
-COPY apps/web/package.json apps/web/tsconfig.json apps/web/next.config.mjs ./apps/web/
-RUN pnpm install --frozen-lockfile=false --prod=false
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY apps/web/package.json apps/web/package.json
+RUN corepack enable && pnpm install --frozen-lockfile
 
-FROM node:20-bookworm-slim AS build
-WORKDIR /app
-ENV PNPM_HOME=/pnpm
-ENV PATH=$PNPM_HOME:$PATH
-RUN corepack enable
-COPY --from=deps /pnpm /pnpm
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/package.json ./
-COPY --from=deps /app/pnpm-workspace.yaml ./
-COPY --from=deps /app/tsconfig.base.json ./
-COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
-COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
-COPY packages ./packages
-COPY apps/web ./apps/web
-RUN pnpm --filter @uzeed/shared build
+FROM base AS build
+COPY apps/web apps/web
 RUN pnpm --filter @uzeed/web build
 
-FROM node:20-bookworm-slim AS runtime
+FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production
-ENV NODE_PATH=/app/apps/web/node_modules
-ENV PORT=3000
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/apps/web/node_modules ./apps/web/node_modules
-COPY --from=build /app/apps/web/.next/standalone ./
-COPY --from=build /app/apps/web/.next/static ./.next/static
+COPY --from=build /app/apps/web/.next ./.next
+COPY --from=build /app/apps/web/package.json ./package.json
 COPY --from=build /app/apps/web/public ./public
+COPY --from=build /app/node_modules ./node_modules
 EXPOSE 3000
-CMD ["node", "server.js"]
+CMD ["node", "node_modules/next/dist/bin/next", "start"]

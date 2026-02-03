@@ -1,47 +1,87 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import { prisma } from "../lib/prisma";
+import prisma from "../lib/prisma";
+import { createSessionToken, verifySessionToken } from "../lib/auth";
 import { env } from "../lib/env";
-import { loginInputSchema, registerInputSchema } from "@uzeed/shared";
 
-export const authRouter = Router();
+const router = Router();
 
-authRouter.post("/register", async (req, res) => {
-  const parsed = registerInputSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "BAD_REQUEST", details: parsed.error.flatten() });
-  const { email, password, displayName } = parsed.data;
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) return res.status(409).json({ error: "EMAIL_IN_USE" });
-  const passwordHash = await bcrypt.hash(password, 12);
+router.post("/register", async (req, res) => {
+  const { email, password, role, name } = req.body as {
+    email: string;
+    password: string;
+    role: "CLIENT" | "PROFESSIONAL" | "ADMIN";
+    name: string;
+  };
+
+  const hashed = await bcrypt.hash(password, 10);
   const user = await prisma.user.create({
     data: {
       email,
-      displayName,
-      passwordHash,
-      role: "USER"
-    },
-    select: { id: true, email: true, displayName: true, role: true, membershipExpiresAt: true }
+      password: hashed,
+      role,
+      name
+    }
   });
-  req.session.userId = user.id;
-  res.json({ user });
+
+  if (role === "PROFESSIONAL") {
+    await prisma.professionalProfile.create({
+      data: {
+        userId: user.id,
+        displayName: name,
+        bio: "",
+        isActive: true
+      }
+    });
+  }
+
+  const token = createSessionToken({ userId: user.id, role: user.role });
+  res.cookie("session", token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    domain: env.COOKIE_DOMAIN || undefined
+  });
+  return res.json({ user });
 });
 
-authRouter.post("/login", async (req, res) => {
-  const parsed = loginInputSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "BAD_REQUEST", details: parsed.error.flatten() });
-  const { email, password } = parsed.data;
+router.post("/login", async (req, res) => {
+  const { email, password } = req.body as { email: string; password: string };
   const user = await prisma.user.findUnique({ where: { email } });
-  if (!user) return res.status(401).json({ error: "INVALID_CREDENTIALS" });
-  const ok = await bcrypt.compare(password, user.passwordHash);
-  if (!ok) return res.status(401).json({ error: "INVALID_CREDENTIALS" });
-  req.session.userId = user.id;
-  const safe = await prisma.user.findUnique({ where: { id: user.id }, select: { id: true, email: true, displayName: true, role: true, membershipExpiresAt: true } });
-  res.json({ user: safe });
+  if (!user) {
+    return res.status(401).json({ error: "Invalid credentials" });
+  }
+  const isValid = await bcrypt.compare(password, user.password);
+  if (!isValid) {
+    return res.status(401).json({ error: "Invalid credentials" });
+  }
+  const token = createSessionToken({ userId: user.id, role: user.role });
+  res.cookie("session", token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    domain: env.COOKIE_DOMAIN || undefined
+  });
+  return res.json({ user });
 });
 
-authRouter.post("/logout", async (req, res) => {
-  req.session.destroy(() => {
-    res.clearCookie(env.SESSION_COOKIE_NAME);
-    res.json({ ok: true });
-  });
+router.post("/logout", (_req, res) => {
+  res.clearCookie("session");
+  return res.json({ ok: true });
 });
+
+router.get("/me", async (req, res) => {
+  const session = req.cookies?.session;
+  if (!session) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  try {
+    const payload = verifySessionToken(session);
+    const user = await prisma.user.findUnique({ where: { id: payload.userId } });
+    return res.json({ user });
+  } catch (error) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+});
+
+export default router;

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const Roles = z.enum(["USER", "ADMIN"]);
+export const Roles = z.enum(["USER", "ADMIN", "STAFF", "SUPPORT"]);
 export type Role = z.infer<typeof Roles>;
 
 export const ProfileTypes = z.enum(["VIEWER", "CREATOR", "PROFESSIONAL", "SHOP"]);

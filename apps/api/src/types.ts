@@ -1,6 +1,6 @@
 export type SessionUser = {
   userId: string;
-  role: "USER" | "ADMIN";
+  role: "USER" | "ADMIN" | "STAFF" | "SUPPORT";
 };
 
 declare module "express-session" {
