@@ -17,6 +17,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     pathname === "/register" ||
     pathname === "/forgot-password";
 
+  useEffect(() => {
+    if (isAuthRoute) return;
+    const source = new EventSource(`${API_URL}/realtime/stream`, { withCredentials: true });
+    source.addEventListener("error", () => {
+      source.close();
+    });
+    return () => source.close();
+  }, [isAuthRoute]);
+
   if (isAuthRoute) {
     return (
       <div className="min-h-screen w-full px-4 py-10">
