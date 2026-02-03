@@ -1,8 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import Nav from "./Nav";
+import { API_URL } from "../lib/api";
 
 /**
  * Single place to control when the app chrome (Nav + shell layout) is shown.
@@ -15,6 +16,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     pathname === "/login" ||
     pathname === "/register" ||
     pathname === "/forgot-password";
+
+  useEffect(() => {
+    if (isAuthRoute) return;
+    const source = new EventSource(`${API_URL}/realtime/stream`, { withCredentials: true });
+    source.addEventListener("error", () => {
+      source.close();
+    });
+    return () => source.close();
+  }, [isAuthRoute]);
 
   if (isAuthRoute) {
     return (
