@@ -36,6 +36,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
+  useEffect(() => {
+    const source = new EventSource(`${API_URL}/realtime/stream`, { withCredentials: true });
+    source.addEventListener("error", () => {
+      source.close();
+    });
+    return () => source.close();
+  }, []);
+
   return (
     <div className="flex min-h-screen w-full bg-transparent text-white">
       <Nav />
