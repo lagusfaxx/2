@@ -10,6 +10,8 @@ datasource db {
 enum Role {
   USER
   ADMIN
+  STAFF
+  SUPPORT
 }
 
 enum ProfileType {
@@ -17,6 +19,24 @@ enum ProfileType {
   CREATOR
   PROFESSIONAL
   SHOP
+}
+
+enum CategoryType {
+  PROFESSIONAL
+  ESTABLISHMENT
+}
+
+enum PlanTier {
+  PREMIUM
+  GOLD
+  SILVER
+}
+
+enum ServiceStatus {
+  PENDING_APPROVAL
+  ACTIVE
+  PENDING_EVALUATION
+  FINISHED
 }
 
 enum Gender {
@@ -79,6 +99,11 @@ model User {
   gender              Gender?
   preferenceGender    PreferenceGender?
   profileType         ProfileType       @default(VIEWER)
+  categoryId          String?           @db.Uuid
+  planId              String?           @db.Uuid
+  isActive            Boolean           @default(true)
+  isOnline            Boolean           @default(false)
+  anonymousMode       Boolean           @default(false)
   address             String?
   city                String?
   latitude            Float?
@@ -111,6 +136,19 @@ model User {
   receivedRatings          ServiceRating[]       @relation("ProfileRatings")
   givenRatings             ServiceRating[]       @relation("GivenRatings")
   notifications            Notification[]
+  category                 Category?             @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  plan                     Plan?                 @relation(fields: [planId], references: [id], onDelete: SetNull)
+  professionalRatings      RatingProfessional[]  @relation("ProfessionalRatings")
+  establishmentOwner       Establishment[]       @relation("EstablishmentOwner")
+  establishmentRatings     RatingEstablishment[] @relation("EstablishmentRatings")
+  favorites                FavoriteProfessional[] @relation("FavoriteOwner")
+  favoriteOf               FavoriteProfessional[] @relation("FavoriteTarget")
+  serviceRequestsAsClient  ServiceRequest[]      @relation("ServiceClient")
+  serviceRequestsAsPro     ServiceRequest[]      @relation("ServiceProfessional")
+  profileViews             ProfileView[]         @relation("ProfileViews")
+  profilesViewed           ProfileView[]         @relation("ProfileViewed")
+  featuredProfiles         FeaturedProfile[]
+  auditLogs                AuditLog[]
 }
 
 model Post {
@@ -268,4 +306,176 @@ model ServiceRating {
   rater   User @relation("GivenRatings", fields: [raterId], references: [id], onDelete: Cascade)
 
   @@unique([profileId, raterId])
+}
+
+model Category {
+  id        String       @id @default(uuid()) @db.Uuid
+  name      String
+  type      CategoryType
+  iconUrl   String?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  profiles       User[]
+  establishments Establishment[]
+}
+
+model Plan {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String
+  tier        PlanTier
+  price       Int
+  badgeColor  String?
+  description String?
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  profiles User[]
+}
+
+model Establishment {
+  id          String    @id @default(uuid()) @db.Uuid
+  ownerId     String?   @db.Uuid
+  name        String
+  city        String?
+  address     String?
+  phone       String?
+  description String?
+  latitude    Float?
+  longitude   Float?
+  categoryId  String?   @db.Uuid
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  owner       User?                @relation("EstablishmentOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  category    Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  media       EstablishmentMedia[]
+  ratings     RatingEstablishment[]
+}
+
+model EstablishmentMedia {
+  id              String    @id @default(uuid()) @db.Uuid
+  establishmentId String    @db.Uuid
+  type            MediaType
+  url             String
+  createdAt       DateTime  @default(now())
+
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+}
+
+model FavoriteProfessional {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @db.Uuid
+  professionalId String   @db.Uuid
+  createdAt      DateTime @default(now())
+
+  user         User @relation("FavoriteOwner", fields: [userId], references: [id], onDelete: Cascade)
+  professional User @relation("FavoriteTarget", fields: [professionalId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, professionalId])
+}
+
+model ServiceRequest {
+  id             String        @id @default(uuid()) @db.Uuid
+  clientId       String        @db.Uuid
+  professionalId String        @db.Uuid
+  status         ServiceStatus @default(PENDING_APPROVAL)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  approvedAt     DateTime?
+  finishedAt     DateTime?
+
+  client       User @relation("ServiceClient", fields: [clientId], references: [id], onDelete: Cascade)
+  professional User @relation("ServiceProfessional", fields: [professionalId], references: [id], onDelete: Cascade)
+}
+
+model RatingProfessional {
+  id             String   @id @default(uuid()) @db.Uuid
+  professionalId String   @db.Uuid
+  clientId       String   @db.Uuid
+  rating         Int
+  comment        String?
+  createdAt      DateTime @default(now())
+
+  professional User @relation("ProfessionalRatings", fields: [professionalId], references: [id], onDelete: Cascade)
+  client       User @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([professionalId, clientId])
+}
+
+model RatingEstablishment {
+  id              String   @id @default(uuid()) @db.Uuid
+  establishmentId String   @db.Uuid
+  clientId        String   @db.Uuid
+  rating          Int
+  comment         String?
+  createdAt       DateTime @default(now())
+
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  client        User          @relation("EstablishmentRatings", fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([establishmentId, clientId])
+}
+
+model Banner {
+  id        String   @id @default(uuid()) @db.Uuid
+  title     String
+  imageUrl  String
+  linkUrl   String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FeaturedProfile {
+  id        String   @id @default(uuid()) @db.Uuid
+  profileId String   @db.Uuid
+  rank      Int      @default(0)
+  createdAt DateTime @default(now())
+
+  profile User @relation(fields: [profileId], references: [id], onDelete: Cascade)
+}
+
+model Country {
+  code      String   @id
+  name      String
+  createdAt DateTime @default(now())
+
+  regions Region[]
+}
+
+model Region {
+  id          String   @id @default(uuid()) @db.Uuid
+  countryCode String
+  name        String
+  createdAt   DateTime @default(now())
+
+  country Country @relation(fields: [countryCode], references: [code], onDelete: Cascade)
+}
+
+model ProfileView {
+  id        String   @id @default(uuid()) @db.Uuid
+  viewerId  String   @db.Uuid
+  profileId String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  viewer  User @relation("ProfileViews", fields: [viewerId], references: [id], onDelete: Cascade)
+  profile User @relation("ProfileViewed", fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([viewerId, createdAt])
+  @@index([profileId, createdAt])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  adminId   String   @db.Uuid
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  admin User @relation(fields: [adminId], references: [id], onDelete: Cascade)
 }

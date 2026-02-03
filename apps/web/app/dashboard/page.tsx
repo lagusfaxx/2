@@ -10,7 +10,7 @@ type MeResponse = {
     email: string;
     displayName: string | null;
     username: string;
-    role: "USER" | "ADMIN";
+    role: "USER" | "ADMIN" | "STAFF" | "SUPPORT";
     membershipExpiresAt: string | null;
     profileType: "VIEWER" | "CREATOR" | "PROFESSIONAL" | "SHOP";
     gender: string | null;
@@ -25,6 +25,9 @@ type MeResponse = {
     address?: string | null;
     phone?: string | null;
     allowFreeMessages?: boolean | null;
+    categoryId?: string | null;
+    planId?: string | null;
+    isActive?: boolean | null;
   } | null;
 };
 
@@ -51,6 +54,13 @@ type ServiceItem = {
   media?: { id: string; type: "IMAGE" | "VIDEO"; url: string }[];
 };
 
+type ServiceRequest = {
+  id: string;
+  status: "PENDING_APPROVAL" | "ACTIVE" | "PENDING_EVALUATION" | "FINISHED";
+  createdAt: string;
+  client: { id: string; displayName: string | null; username: string; avatarUrl: string | null };
+};
+
 type NotificationItem = {
   id: string;
   type: string;
@@ -66,6 +76,9 @@ type StatsResponse = {
   services: number;
 };
 
+type Category = { id: string; name: string; type: string };
+type Plan = { id: string; name: string; tier: string; price: number };
+
 export default function DashboardPage() {
   const [me, setMe] = useState<MeResponse["user"] | null>(null);
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
@@ -76,6 +89,7 @@ export default function DashboardPage() {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [serviceItems, setServiceItems] = useState<ServiceItem[]>([]);
+  const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
   const [serviceTitle, setServiceTitle] = useState("");
   const [serviceCategoryName, setServiceCategoryName] = useState("");
   const [servicePrice, setServicePrice] = useState<number | "">("");
@@ -104,6 +118,11 @@ export default function DashboardPage() {
   const [serviceCategory, setServiceCategory] = useState("");
   const [serviceDescription, setServiceDescription] = useState("");
   const [allowFreeMessages, setAllowFreeMessages] = useState(false);
+  const [categoryId, setCategoryId] = useState("");
+  const [planId, setPlanId] = useState("");
+  const [isActiveProfile, setIsActiveProfile] = useState(true);
+  const [availableCategories, setAvailableCategories] = useState<Category[]>([]);
+  const [availablePlans, setAvailablePlans] = useState<Plan[]>([]);
 
   const handleImageSelection = (file: File | null, setter: (file: File | null) => void) => {
     if (!file) {
@@ -152,6 +171,18 @@ export default function DashboardPage() {
     }
   };
 
+  const updateServiceRequest = async (id: string, status: ServiceRequest["status"]) => {
+    try {
+      const res = await apiFetch<{ request: ServiceRequest }>(`/services/requests/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status })
+      });
+      setServiceRequests((prev) => prev.map((r) => (r.id === id ? res.request : r)));
+    } catch (e: any) {
+      setError(e?.message || "No se pudo actualizar la solicitud");
+    }
+  };
+
   useEffect(() => {
     Promise.all([
       apiFetch<MeResponse>("/auth/me"),
@@ -178,6 +209,9 @@ export default function DashboardPage() {
         setServiceCategory(m.user.serviceCategory || "");
         setServiceDescription(m.user.serviceDescription || "");
         setAllowFreeMessages(Boolean(m.user.allowFreeMessages));
+        setCategoryId(m.user.categoryId || "");
+        setPlanId(m.user.planId || "");
+        setIsActiveProfile(m.user.isActive !== false);
       })
       .catch((e: any) => setError(e?.message || "Error"))
       .finally(() => setLoading(false));
@@ -191,8 +225,38 @@ export default function DashboardPage() {
   }, [me?.id]);
 
   useEffect(() => {
+    if (!me?.id) return;
+    if (me.profileType !== "PROFESSIONAL") return;
+    apiFetch<{ requests: ServiceRequest[] }>(`/services/requests?as=professional`)
+      .then((r) => setServiceRequests(r.requests))
+      .catch(() => null);
+  }, [me?.id, me?.profileType]);
+
+  useEffect(() => {
+    if (!me?.id || me.profileType !== "PROFESSIONAL") return;
+    const source = new EventSource(`${API_URL}/realtime/stream`, { withCredentials: true });
+    const refresh = () => {
+      apiFetch<{ requests: ServiceRequest[] }>(`/services/requests?as=professional`)
+        .then((r) => setServiceRequests(r.requests))
+        .catch(() => null);
+    };
+    source.addEventListener("service:request", refresh as EventListener);
+    source.addEventListener("service:update", refresh as EventListener);
+    return () => source.close();
+  }, [me?.id, me?.profileType]);
+
+  useEffect(() => {
     apiFetch<{ notifications: NotificationItem[] }>("/notifications")
       .then((r) => setNotifications(r.notifications))
+      .catch(() => null);
+  }, []);
+
+  useEffect(() => {
+    apiFetch<{ categories: Category[] }>("/categories?type=PROFESSIONAL")
+      .then((r) => setAvailableCategories(r.categories))
+      .catch(() => null);
+    apiFetch<{ plans: Plan[] }>("/plans")
+      .then((r) => setAvailablePlans(r.plans))
       .catch(() => null);
   }, []);
 
@@ -231,7 +295,10 @@ export default function DashboardPage() {
           subscriptionPrice,
           serviceCategory,
           serviceDescription,
-          allowFreeMessages: allowFreeMessages ? "true" : "false"
+          allowFreeMessages: allowFreeMessages ? "true" : "false",
+          categoryId,
+          planId,
+          isActive: isActiveProfile ? "true" : "false"
         })
       });
       if (avatarFile) {
@@ -371,6 +438,7 @@ export default function DashboardPage() {
               ...(me.profileType === "PROFESSIONAL" || me.profileType === "SHOP"
                 ? [{ id: "servicios", label: "Servicios" }]
                 : []),
+              ...(me.profileType === "PROFESSIONAL" ? [{ id: "solicitudes", label: "Solicitudes" }] : []),
               { id: "estadisticas", label: "Estadísticas" },
               { id: "notificaciones", label: "Notificaciones" },
               { id: "seguridad", label: "Seguridad" }
@@ -467,6 +535,53 @@ export default function DashboardPage() {
 
                 {me.profileType === "PROFESSIONAL" || me.profileType === "SHOP" ? (
                   <>
+                    {me.profileType === "PROFESSIONAL" ? (
+                      <div className="grid gap-2">
+                        <label className="text-sm text-white/70">Categoría profesional</label>
+                        <select
+                          className="input select-dark"
+                          value={categoryId}
+                          onChange={(e) => setCategoryId(e.target.value)}
+                        >
+                          <option value="">Sin categoría</option>
+                          {availableCategories.map((cat) => (
+                            <option key={cat.id} value={cat.id}>
+                              {cat.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : null}
+                    {me.profileType === "PROFESSIONAL" ? (
+                      <div className="grid gap-2">
+                        <label className="text-sm text-white/70">Plan profesional</label>
+                        <select
+                          className="input select-dark"
+                          value={planId}
+                          onChange={(e) => setPlanId(e.target.value)}
+                        >
+                          <option value="">Sin plan</option>
+                          {availablePlans.map((plan) => (
+                            <option key={plan.id} value={plan.id}>
+                              {plan.name} (${plan.price.toLocaleString("es-CL")})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : null}
+                    {me.profileType === "PROFESSIONAL" ? (
+                      <div className="grid gap-2">
+                        <label className="text-sm text-white/70">Estado del perfil</label>
+                        <select
+                          className="input select-dark"
+                          value={isActiveProfile ? "true" : "false"}
+                          onChange={(e) => setIsActiveProfile(e.target.value === "true")}
+                        >
+                          <option value="true">Activa</option>
+                          <option value="false">Inactiva</option>
+                        </select>
+                      </div>
+                    ) : null}
                     <div className="grid gap-2">
                       <label className="text-sm text-white/70">Categoría</label>
                       <input
@@ -695,6 +810,53 @@ export default function DashboardPage() {
                   <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-sm text-white/60">
                     Agrega tu primer servicio para aparecer en el catálogo.
                   </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          {activeTab === "solicitudes" && me.profileType === "PROFESSIONAL" ? (
+            <div className="card p-6 md:p-8">
+              <h2 className="text-lg font-semibold">Solicitudes de servicio</h2>
+              <p className="mt-2 text-sm text-white/60">
+                Aprueba, activa o finaliza servicios solicitados por clientes.
+              </p>
+              <div className="mt-6 grid gap-4">
+                {serviceRequests.map((request) => (
+                  <div key={request.id} className="rounded-xl border border-white/10 bg-white/5 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="font-semibold">{request.client.displayName || request.client.username}</div>
+                        <div className="text-xs text-white/50">{request.status}</div>
+                      </div>
+                      <Link className="btn-secondary" href={`/chats/${request.client.id}`}>
+                        Enviar mensaje
+                      </Link>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        className="btn-primary"
+                        onClick={() => updateServiceRequest(request.id, "ACTIVE")}
+                      >
+                        Aprobar
+                      </button>
+                      <button
+                        className="btn-secondary"
+                        onClick={() => updateServiceRequest(request.id, "PENDING_EVALUATION")}
+                      >
+                        Marcar pendiente de evaluación
+                      </button>
+                      <button
+                        className="btn-secondary"
+                        onClick={() => updateServiceRequest(request.id, "FINISHED")}
+                      >
+                        Finalizar/Rechazar
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {!serviceRequests.length ? (
+                  <div className="text-sm text-white/50">No hay solicitudes pendientes.</div>
                 ) : null}
               </div>
             </div>
