@@ -192,7 +192,11 @@ profileRouter.put("/profile", requireAuth, asyncHandler(async (req, res) => {
     city,
     latitude,
     longitude,
-    allowFreeMessages
+    allowFreeMessages,
+    categoryId,
+    planId,
+    isActive,
+    anonymousMode
   } = req.body as Record<string, string | null>;
   const allowedGenders = new Set(["MALE", "FEMALE", "OTHER"]);
   const allowedPrefs = new Set(["MALE", "FEMALE", "ALL", "OTHER"]);
@@ -210,6 +214,8 @@ profileRouter.put("/profile", requireAuth, asyncHandler(async (req, res) => {
   if (!me) return res.status(404).json({ error: "NOT_FOUND" });
   const canSetPrice = me.profileType === "CREATOR";
   const allowFree = allowFreeMessages === "true";
+  const safeActive = typeof isActive === "string" ? isActive === "true" : undefined;
+  const safeAnonymous = typeof anonymousMode === "string" ? anonymousMode === "true" : undefined;
   const user = await prisma.user.update({
     where: { id: req.session.userId! },
     data: {
@@ -226,7 +232,11 @@ profileRouter.put("/profile", requireAuth, asyncHandler(async (req, res) => {
       serviceDescription: serviceDescription ?? undefined,
       city: city ?? undefined,
       latitude: latitude ? Number(latitude) : undefined,
-      longitude: longitude ? Number(longitude) : undefined
+      longitude: longitude ? Number(longitude) : undefined,
+      categoryId: categoryId || undefined,
+      planId: planId || undefined,
+      isActive: safeActive,
+      anonymousMode: safeAnonymous
     }
   });
   return res.json({ user });

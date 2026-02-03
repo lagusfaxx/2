@@ -26,6 +26,8 @@ import { notificationsRouter } from "./notifications/routes";
 import { KhipuError } from "./khipu/client";
 import { statsRouter } from "./stats/routes";
 import { prisma } from "./db";
+import { directoryRouter } from "./directory/routes";
+import { realtimeRouter } from "./realtime/routes";
 
 const app = express();
 
@@ -198,6 +200,8 @@ app.use("/", creatorRouter);
 app.use("/", billingRouter);
 app.use("/", notificationsRouter);
 app.use("/", statsRouter);
+app.use("/", directoryRouter);
+app.use("/", realtimeRouter);
 
 // Error handler
 app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {

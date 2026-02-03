@@ -9,6 +9,7 @@ import { LocalStorageProvider } from "../storage/local";
 import { config } from "../config";
 import { validateUploadedFile } from "../lib/uploads";
 import { isUUID } from "../lib/validators";
+import { emitRealtimeEvent } from "../realtime/server";
 
 export const messagesRouter = Router();
 
@@ -156,6 +157,11 @@ messagesRouter.post("/messages/:userId", requireAuth, asyncHandler(async (req, r
       data: { fromId: me, messageId: message.id }
     }
   });
+  emitRealtimeEvent({
+    type: "message:new",
+    payload: { message },
+    targets: [me, other]
+  });
   return res.json({ message });
 }));
 
@@ -185,6 +191,11 @@ messagesRouter.post("/messages/:userId/attachment", requireAuth, upload.single("
       type: "MESSAGE_RECEIVED",
       data: { fromId: me, messageId: message.id }
     }
+  });
+  emitRealtimeEvent({
+    type: "message:new",
+    payload: { message },
+    targets: [me, other]
   });
   return res.json({ message });
 }));
